@@ -11,6 +11,7 @@ import stripe
 from django import forms
 from django.conf import settings
 from django.contrib import messages
+from django.contrib.gis.geoip2 import GeoIP2
 from django.core import signing
 from django.db import transaction
 from django.http import HttpRequest
@@ -21,17 +22,25 @@ from django.utils.safestring import mark_safe
 from django.utils.timezone import now
 from django.utils.translation import gettext, gettext_lazy as _, pgettext
 from django_countries import countries
+from django_countries.fields import Country
+from geoip2.errors import AddressNotFoundError
 from pydantic import ValidationError
 
 from pretix.base.decimal import round_decimal
 from pretix.base.forms import SecretKeySettingsField
-from pretix.base.models import Event, OrderPayment, OrderRefund, Quota
+from pretix.base.forms.questions import guess_country
+from pretix.base.models import (
+    Event, InvoiceAddress, Order, OrderPayment, OrderRefund, Quota,
+)
 from pretix.base.payment import BasePaymentProvider, PaymentException
 from pretix.base.plugins import get_all_plugins
 from pretix.base.services.mail import SendMailException
 from pretix.base.settings import SettingsSandbox
+from pretix.helpers.countries import CachedCountries
+from pretix.helpers.http import get_client_ip
 from pretix.helpers.urls import build_absolute_uri as build_global_uri
 from pretix.multidomain.urlreverse import build_absolute_uri
+from pretix.presale.views.cart import cart_session
 
 from .forms import StripeKeyValidator
 from .models import ReferencedStripeObject, RegisteredApplePayDomain
@@ -238,8 +247,7 @@ class StripeSettingsHolder(BasePaymentProvider):
                         label=_("Alipay"),
                         disabled=self.event.currency
                         not in (
-                            "CNY",
-                            "SGD",
+                            'EUR', 'AUD', 'CAD', 'GBP', 'HKD', 'JPY', 'NZD', 'SGD', 'USD'
                         ),
                         help_text=_(
                             "Needs to be enabled in your Stripe account first."
@@ -313,12 +321,114 @@ class StripeSettingsHolder(BasePaymentProvider):
                     forms.BooleanField(
                         label=_("WeChat Pay"),
                         disabled=self.event.currency
-                        not in ["GBP", "CNY"],
+                        not in ['AUD', 'CAD', 'EUR', 'GBP', 'HKD', 'JPY', 'SGD', 'USD'],
                         help_text=_(
                             "Needs to be enabled in your Stripe account first."
                         ),
                         required=False,
                     ),
+                ),
+                (
+                    'method_mobilepay',
+                    forms.BooleanField(
+                        label=_('MobilePay'),
+                        disabled=self.event.currency not in ['DKK', 'EUR', 'NOK', 'SEK'],
+                        help_text=_('Some payment methods might need to be enabled in the settings of your Stripe account '
+                                    'before they work properly.'),
+                        required=False,
+                    )
+                ),
+                (
+                    'method_revolut_pay',
+                    forms.BooleanField(
+                        label='Revolut Pay',
+                        disabled=self.event.currency not in ['EUR', 'GBP'],
+                        help_text=_('Revolut Pay method might need to be enabled in the settings of your Stripe account '
+                                    'before they work properly. Revolut Pay payments must be in currencies supported in your country.'),
+                        required=False,
+                    )
+                ),
+                (
+                    'method_swish',
+                    forms.BooleanField(
+                        label=_('Swish'),
+                        disabled=self.event.currency != 'SEK',
+                        help_text=_('Swish method might need to be enabled in the settings of your Stripe account '
+                                    'before they work properly.'),
+                        required=False,
+                    )
+                ),
+                (
+                    'method_twint',
+                    forms.BooleanField(
+                        label='TWINT',
+                        disabled=self.event.currency != 'CHF',
+                        help_text=_('Some payment methods might need to be enabled in the settings of your Stripe account '
+                                    'before they work properly.'),
+                        required=False,
+                    )
+                ),
+                (
+                    'method_affirm',
+                    forms.BooleanField(
+                        label=_('Affirm'),
+                        disabled=self.event.currency not in ['USD', 'CAD'],
+                        help_text=' '.join([
+                            str(_('Some payment methods might need to be enabled in the settings of your Stripe account '
+                                'before they work properly.')),
+                            str(_('Only available for payments between $50 and $30,000.'))
+                        ]),
+                        required=False,
+                    )
+                ),
+                (
+                    'method_klarna',
+                    forms.BooleanField(
+                        label=_('Klarna'),
+                        disabled=self.event.currency not in [
+                            'AUD', 'CAD', 'CHF', 'CZK', 'DKK', 'EUR', 'GBP', 'NOK', 'NZD', 'PLN', 'SEK', 'USD'
+                        ],
+                        help_text=' '.join([
+                            str(_('Some payment methods might need to be enabled in the settings of your Stripe account '
+                                'before they work properly.')),
+                            str(_('Klarna and Stripe will decide which of the payment methods offered by Klarna are '
+                                'available to the user.')),
+                            str(_('Klarna\'s terms of services do not allow it to be used by charities or political '
+                                'organizations.')),
+                        ]),
+                        required=False,
+                    )
+                ),
+                (
+                    'method_sepa_debit',
+                    forms.BooleanField(
+                        label=_('SEPA Direct Debit'),
+                        disabled=self.event.currency != 'EUR',
+                        help_text=(
+                            _('Some payment methods might need to be enabled in the settings of your Stripe account '
+                                'before work properly.') +
+                            '<div class="alert alert-warning">%s</div>' % _(
+                                'SEPA Direct Debit payments via Stripe are <strong>not</strong> processed '
+                                'instantly but might take up to <strong>14 days</strong> to be confirmed in some cases. '
+                                'Please only activate this payment method if your payment term allows for this lag.'
+                            )),
+                        required=False,
+                    )
+                ),
+                (
+                    'sepa_creditor_name',
+                    forms.CharField(
+                        label=_('SEPA Creditor Mandate Name'),
+                        disabled=self.event.currency != 'EUR',
+                        help_text=_('Please provide your SEPA Creditor Mandate Name, that will be displayed to the user.'),
+                        required=False,
+                        widget=forms.TextInput(
+                            attrs={
+                                'data-display-dependency': '#id_payment_stripe_method_sepa_debit',
+                                'data-required-if': '#id_payment_stripe_method_sepa_debit'
+                            }
+                        ),
+                    )
                 ),
             ]
             + list(super().settings_form_fields.items())
@@ -1585,6 +1695,30 @@ class StripePrzelewy24(Redirector):
             return super().payment_presale_render(payment)
 
 
+class StripeSwish(Redirector):
+    identifier = 'stripe_swish'
+    verbose_name = _('Swish via Stripe')
+    public_name = _('Swish')
+    method = 'swish'
+    confirmation_method = 'automatic'
+    explanation = _(
+        'This payment method is available to users of the Swedish apps Swish and BankID. Please have your app '
+        'ready.'
+    )
+
+    def _intent_api_args(self, request, payment):
+        return {
+            "payment_method_data": {
+                "type": "swish",
+            },
+            "payment_method_options": {
+                "swish": {
+                    "reference": payment.order.full_code,
+                },
+            }
+        }
+
+
 class StripeWeChatPay(Redirector):
     """Represents the Stripe Webchat payment method integration"""
     identifier = "stripe_wechatpay"
@@ -1611,3 +1745,325 @@ class StripeWeChatPay(Redirector):
                 },
             }
         }
+
+
+class StripeTwint(Redirector):
+    identifier = 'stripe_twint'
+    verbose_name = _('TWINT via Stripe')
+    public_name = 'TWINT'
+    method = 'twint'
+    confirmation_method = 'automatic'
+    explanation = _(
+        'This payment method is available to users of the Swiss app TWINT. Please have your app '
+        'ready.'
+    )
+
+    def is_allowed(self, request: HttpRequest, total: Decimal=None) -> bool:
+        return super().is_allowed(request, total) and request.event.currency == "CHF" and total <= Decimal("5000.00")
+
+    def _intent_api_args(self, request, payment):
+        return {
+            "payment_method_data": {
+                "type": "twint",
+            },
+        }
+
+
+class StripeMobilePay(Redirector):
+    identifier = 'stripe_mobilepay'
+    verbose_name = 'MobilePay via Stripe'
+    public_name = 'MobilePay'
+    method = 'mobilepay'
+    confirmation_method = 'automatic'
+    explanation = _(
+        'This payment method is available to MobilePay app users in Denmark and Finland. Please have your app ready.'
+    )
+
+    def _intent_api_args(self, request, payment):
+        return {
+            "payment_method_data": {
+                "type": "mobilepay",
+            },
+        }
+
+
+class StripeRevolutPay(Redirector):
+    verbose_name = _('Revolut Pay via Stripe')
+    public_name = _('Revolut Pay')
+    method = 'revolut_pay'
+    confirmation_method = 'automatic'
+    explanation = _(
+        'This payment method is available to users of the Revolut app. Please keep your login information '
+        'available.'
+    )
+
+    def _intent_api_args(self, request, payment):
+        return {
+            "payment_method_data": {
+                "type": "revolut_pay",
+            },
+        }
+
+
+class StripePayPal(Redirector):
+    identifier = 'stripe_paypal'
+    verbose_name = _('PayPal via Stripe')
+    public_name = _('PayPal')
+    method = 'paypal'
+
+
+class StripeSEPADirectDebit(StripeMethod):
+    identifier = 'stripe_sepa_debit'
+    verbose_name = _('SEPA Debit via Stripe')
+    public_name = _('SEPA Debit')
+    method = 'sepa_debit'
+    ia = InvoiceAddress()
+
+    def payment_form_render(self, request: HttpRequest, total: Decimal, order: Order=None) -> str:
+        def get_invoice_address():
+            if order and getattr(order, 'invoice_address', None):
+                request._checkout_flow_invoice_address = order.invoice_address
+            if not hasattr(request, '_checkout_flow_invoice_address'):
+                cs = cart_session(request)
+                iapk = cs.get('invoice_address')
+                if not iapk:
+                    request._checkout_flow_invoice_address = InvoiceAddress()
+                else:
+                    try:
+                        request._checkout_flow_invoice_address = InvoiceAddress.objects.get(pk=iapk, order__isnull=True)
+                    except InvoiceAddress.DoesNotExist:
+                        request._checkout_flow_invoice_address = InvoiceAddress()
+            return request._checkout_flow_invoice_address
+
+        cs = cart_session(request)
+        self.ia = get_invoice_address()
+
+        template = get_template('plugins/stripe/sepadirectdebit.html')
+        ctx = {
+            'request': request,
+            'event': self.event,
+            'settings': self.settings,
+            'form': self.payment_form(request),
+            'explanation': self.explanation,
+            'email': order.email if order else cs.get('email', '')
+        }
+        return template.render(ctx)
+
+    @property
+    def payment_form_fields(self):
+        return OrderedDict(
+            [
+                ('accountname',
+                 forms.CharField(
+                     label=_('Account Holder Name'),
+                     initial=self.ia.name,
+                 )),
+                ('line1',
+                 forms.CharField(
+                     label=_('Account Holder Street'),
+                     required=False,
+                     widget=forms.TextInput(
+                         attrs={
+                             'data-display-dependency': '#stripe_sepa_debit_country',
+                             'data-required-if': '#stripe_sepa_debit_country'
+                         }
+                     ),
+                     initial=self.ia.street,
+                 )),
+                ('postal_code',
+                 forms.CharField(
+                     label=_('Account Holder Postal Code'),
+                     required=False,
+                     widget=forms.TextInput(
+                         attrs={
+                             'data-display-dependency': '#stripe_sepa_debit_country',
+                             'data-required-if': '#stripe_sepa_debit_country'
+                         }
+                     ),
+                     initial=self.ia.zipcode,
+                 )),
+                ('city',
+                 forms.CharField(
+                     label=_('Account Holder City'),
+                     required=False,
+                     widget=forms.TextInput(
+                         attrs={
+                             'data-display-dependency': '#stripe_sepa_debit_country',
+                             'data-required-if': '#stripe_sepa_debit_country'
+                         }
+                     ),
+                     initial=self.ia.city,
+                 )),
+                ('country',
+                 forms.ChoiceField(
+                     label=_('Account Holder Country'),
+                     required=False,
+                     choices=CachedCountries(),
+                     widget=forms.Select(
+                         attrs={
+                             'data-display-dependency': '#stripe_sepa_debit_country',
+                             'data-required-if': '#stripe_sepa_debit_country'
+                         }
+                     ),
+                     initial=self.ia.country or guess_country(self.event),
+                 )),
+            ])
+
+    def _intent_api_args(self, request, payment):
+        return {
+            'mandate_data': {
+                'customer_acceptance': {
+                    'type': 'online',
+                    'online': {
+                        'ip_address': get_client_ip(request),
+                        'user_agent': request.META['HTTP_USER_AGENT'],
+                    }
+                },
+            }
+        }
+
+    def checkout_prepare(self, request, cart):
+        request.session['payment_stripe_sepa_debit_last4'] = request.POST.get('stripe_sepa_debit_last4', '')
+        request.session['payment_stripe_sepa_debit_bank'] = request.POST.get('stripe_sepa_debit_bank', '')
+
+        return super().checkout_prepare(request, cart)
+
+    def execute_payment(self, request: HttpRequest, payment: OrderPayment):
+        try:
+            return super().execute_payment(request, payment)
+        finally:
+            fields = ['accountname', 'line1', 'postal_code', 'city', 'country']
+            for field in fields:
+                if 'payment_stripe_sepa_debit_{}'.format(field) in request.session:
+                    del request.session['payment_stripe_sepa_debit_{}'.format(field)]
+
+
+class StripeAffirm(StripeMethod):
+    identifier = 'stripe_affirm'
+    verbose_name = _('Affirm via Stripe')
+    public_name = _('Affirm')
+    method = 'affirm'
+    redirect_action_handling = 'redirect'
+
+    def payment_is_valid_session(self, request):
+        if 'payment_stripe_{}_payment_method_id'.format(self.method) in request.session:
+            return True
+        return False
+
+    def checkout_prepare(self, request, cart):
+        request.session['payment_stripe_{}_payment_method_id'.format(self.method)] = None
+        return True
+
+    def is_allowed(self, request: HttpRequest, total: Decimal=None) -> bool:
+        return Decimal(50.00) <= total <= Decimal(30000.00) and super().is_allowed(request, total)
+
+    def order_change_allowed(self, order: Order, request: HttpRequest=None) -> bool:
+        return Decimal(50.00) <= order.pending_sum <= Decimal(30000.00) and super().order_change_allowed(order, request)
+
+    def _intent_api_args(self, request, payment):
+        return {
+            'payment_method_data': {
+                'type': 'affirm',
+            }
+        }
+
+    def payment_form_render(self, request, total, order=None) -> str:
+        template = get_template('plugins/stripe/simple_messaging_noform.html')
+        ctx = {
+            'request': request,
+            'event': self.event,
+            'total': self._decimal_to_int(total),
+            'explanation': self.explanation,
+            'method': self.method,
+        }
+        return template.render(ctx)
+
+
+class StripeKlarna(Redirector):
+    identifier = "stripe_klarna"
+    verbose_name = _("Klarna via Stripe")
+    public_name = _("Klarna")
+    method = "klarna"
+    allowed_countries = {"US", "CA", "AU", "NZ", "GB", "IE", "FR", "ES", "DE", "AT", "BE", "DK", "FI", "IT", "NL", "NO", "SE"}
+    redirect_in_widget_allowed = False
+
+    def _detect_country(self, request, order=None):
+        def get_invoice_address():
+            if order and getattr(order, 'invoice_address', None):
+                request._checkout_flow_invoice_address = order.invoice_address
+            if not hasattr(request, '_checkout_flow_invoice_address'):
+                cs = cart_session(request)
+                iapk = cs.get('invoice_address')
+                if not iapk:
+                    request._checkout_flow_invoice_address = InvoiceAddress()
+                else:
+                    try:
+                        request._checkout_flow_invoice_address = InvoiceAddress.objects.get(pk=iapk, order__isnull=True)
+                    except InvoiceAddress.DoesNotExist:
+                        request._checkout_flow_invoice_address = InvoiceAddress()
+            return request._checkout_flow_invoice_address
+
+        ia = get_invoice_address()
+        country = None
+        if ia.country:
+            country = str(ia.country)
+        if country not in self.allowed_countries:
+            if settings.HAS_GEOIP:
+                g = GeoIP2()
+                try:
+                    res = g.country(get_client_ip(request))
+                    if res['country_code'] and len(res['country_code']) == 2:
+                        country = Country(res['country_code'])
+                except AddressNotFoundError:
+                    pass
+            country = country or guess_country(self.event)
+        if country not in self.allowed_countries:
+            country = self.settings.merchant_country
+        if country not in self.allowed_countries:
+            country = "DE"
+        return country
+
+    def _intent_api_args(self, request, payment):
+        return {
+            "payment_method_data": {
+                "type": "klarna",
+                "billing_details": {
+                    "email": payment.order.email,
+                    "address": {
+                        "country": self._detect_country(request, payment.order),
+                    },
+                },
+            }
+        }
+
+    def payment_form_render(self, request, total, order=None) -> str:
+        template = get_template(
+            "plugins/stripe/simple_messaging_noform.html"
+        )
+        ctx = {
+            "request": request,
+            "event": self.event,
+            "total": self._decimal_to_int(total),
+            "method": self.method,
+            'explanation': self.explanation,
+            "country": self._detect_country(request, order)
+        }
+        return template.render(ctx)
+
+    def test_mode_message(self):
+        if self.settings.connect_client_id and not self.settings.secret_key:
+            is_testmode = True
+        else:
+            is_testmode = (
+                self.settings.secret_key and "_test_" in self.settings.secret_key
+            )
+        if is_testmode:
+            return mark_safe(
+                _(
+                    "The Stripe plugin is operating in test mode. You can use one of <a {args}>many test "
+                    "cards</a> to perform a transaction. No money will actually be transferred."
+                ).format(
+                    args='href="https://docs.klarna.com/resources/test-environment/sample-customer-data/" target="_blank"'
+                )
+            )
+        return None

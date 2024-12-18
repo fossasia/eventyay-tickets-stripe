@@ -30,6 +30,37 @@ var stripeObj = {
             }
         });
     },
+    'pm_request': function (method, element, kwargs = {}) {
+        waitingDialog.show(gettext("Contacting Stripe …"));
+        $(".stripe-errors").hide();
+
+        stripeObj.stripe.createPaymentMethod(method, element, kwargs).then(function (result) {
+            waitingDialog.hide();
+            if (result.error) {
+                $(".stripe-errors").stop().hide().removeClass("sr-only");
+                $(".stripe-errors").html("<div class='alert alert-danger'>" + result.error.message + "</div>");
+                $(".stripe-errors").slideDown();
+            } else {
+                var $form = $("#stripe_" + method + "_payment_method_id").closest("form");
+                // Insert the token into the form so it gets submitted to the server
+                $("#stripe_" + method + "_payment_method_id").val(result.paymentMethod.id);
+                if (method === 'card') {
+                    $("#stripe_card_brand").val(result.paymentMethod.card.brand);
+                    $("#stripe_card_last4").val(result.paymentMethod.card.last4);
+                }
+                if (method === 'sepa_debit') {
+                    $("#stripe_sepa_debit_last4").val(result.paymentMethod.sepa_debit.last4);
+                }
+                // and submit
+                $form.get(0).submit();
+            }
+        }).catch((e) => {
+            waitingDialog.hide();
+            $(".stripe-errors").stop().hide().removeClass("sr-only");
+            $(".stripe-errors").html("<div class='alert alert-danger'>Technical error, please contact support: " + e + "</div>");
+            $(".stripe-errors").slideDown();
+        });
+    },
     'load': function () {
       if (stripeObj.stripe !== null) {
           return;
@@ -125,7 +156,72 @@ var stripeObj = {
                           $('#stripe-payment-request-button').hide();
                           document.getElementById('stripe-payment-request-button').style.display = 'none';
                         }
-                      });
+                      })
+                    };
+                    if ($("#stripe-sepa").length) {
+                        stripeObj.sepa = stripeObj.elements.create('iban', {
+                            'style': {
+                                'base': {
+                                    'fontFamily': '"Open Sans","OpenSans","Helvetica Neue",Helvetica,Arial,sans-serif',
+                                    'fontSize': '14px',
+                                    'color': '#555555',
+                                    'lineHeight': '1.42857',
+                                    'border': '1px solid #ccc',
+                                    '::placeholder': {
+                                        color: 'rgba(0,0,0,0.4)',
+                                    },
+                                },
+                                'invalid': {
+                                    'color': 'red',
+                                },
+                            },
+                            supportedCountries: ['SEPA'],
+                            classes: {
+                                focus: 'is-focused',
+                                invalid: 'has-error',
+                            }
+                        });
+                        stripeObj.sepa.on('change', function (event) {
+                            // List of IBAN-countries, that require the country as well as line1-property according to
+                            // https://stripe.com/docs/payments/sepa-debit/accept-a-payment?platform=web&ui=element#web-submit-payment
+                            if (['AD', 'PF', 'TF', 'GI', 'GB', 'GG', 'VA', 'IM', 'JE', 'MC', 'NC', 'BL', 'PM', 'SM', 'CH', 'WF'].indexOf(event.country) > 0) {
+                                $("#stripe_sepa_debit_country").prop('checked', true);
+                                $("#stripe_sepa_debit_country").change();
+                            } else {
+                                $("#stripe_sepa_debit_country").prop('checked', false);
+                                $("#stripe_sepa_debit_country").change();
+                            }
+                            if (event.bankName) {
+                                $("#stripe_sepa_debit_bank").val(event.bankName);
+                            }
+                        });
+                        stripeObj.sepa.mount("#stripe-sepa");
+                        stripeObj.sepa.on('ready', function () {
+                            $('.stripe-container').closest("form").find(".checkout-button-row .btn-primary").prop("disabled", false);
+                        });
+                    }
+                    if ($("#stripe-affirm").length) {
+                        stripeObj.affirm = stripeObj.elements.create('affirmMessage', {
+                            'amount': parseInt($("#stripe_affirm_total").val()),
+                            'currency': $("#stripe_affirm_currency").val(),
+                        });
+
+                        stripeObj.affirm.mount('#stripe-affirm');
+                    }
+                    if ($("#stripe-klarna").length) {
+                        try {
+                            stripeObj.klarna = stripeObj.elements.create('paymentMethodMessaging', {
+                                'amount': parseInt($("#stripe_klarna_total").val()),
+                                'currency': $("#stripe_klarna_currency").val(),
+                                'countryCode': $("#stripe_klarna_country").val(),
+                                'paymentMethodTypes': ['klarna'],
+                            });
+
+                            stripeObj.klarna.mount('#stripe-klarna');
+                        } catch (e) {
+                            console.error(e);
+                            $("#stripe-klarna").html("<div class='alert alert-danger'>Technical error, please contact support: " + e + "</div>");
+                        }
                     }
                 }
             }
@@ -282,12 +378,16 @@ $(function () {
 
     if (!$(".stripe-container").length)
         return;
-
-    if ($("input[name=payment][value=stripe]").is(':checked') || $(".payment-redo-form").length) {
-          stripeObj.load();
+    if (
+        $("input[name=payment][value=stripe]").is(':checked')
+        || $("input[name=payment][value=stripe_sepa_debit]").is(':checked')
+        || $("input[name=payment][value=stripe_affirm]").is(':checked')
+        || $("input[name=payment][value=stripe_klarna]").is(':checked')
+        || $(".payment-redo-form").length) {
+            stripeObj.load();
     } else {
         $("input[name=payment]").change(function () {
-            if ($(this).val() === 'stripe') {
+            if (['stripe', 'stripe_sepa_debit', 'stripe_affirm', 'stripe_klarna'].indexOf($(this).val()) > -1) {
                 stripeObj.load();
             }
         })
@@ -308,6 +408,25 @@ $(function () {
         $("#stripe-elements").hide();
     }
 
+    $("#stripe_other_account").click(
+        function (e) {
+            $("#stripe_sepa_debit_payment_method_id").val("");
+            $("#stripe-current-account").slideUp();
+            // We're using a css-selector here instead of the id-selector,
+            // as we're hiding Stripe Elements *and* Django form fields
+            $('.stripe-sepa_debit-form').slideDown();
+
+            e.preventDefault();
+            return false;
+        }
+    );
+
+    if ($("#stripe-current-account").length) {
+        // We're using a css-selector here instead of the id-selector,
+        // as we're hiding Stripe Elements *and* Django form fields
+        $('.stripe-sepa_debit-form').hide();
+    }
+
     $('.stripe-container').closest("form").submit(
         function () {
             if ($("input[name=card_new]").length && !$("input[name=card_new]").prop('checked')) {
@@ -316,6 +435,22 @@ $(function () {
             if (($("input[name=payment][value=stripe]").prop('checked') || $("input[name=payment][type=radio]").length === 0)
                 && $("#stripe_payment_method_id").val() == "") {
                 stripeObj.cc_request();
+                return false;
+            }
+            
+            if (($("input[name=payment][value=stripe_sepa_debit]").prop('checked')) && $("#stripe_sepa_debit_payment_method_id").val() == "") {
+                stripeObj.pm_request('sepa_debit', stripeObj.sepa, {
+                    billing_details: {
+                        name: $("#id_payment_stripe_sepa_debit-accountname").val(),
+                        email: $("#stripe_sepa_debit_email").val(),
+                        address: {
+                            line1: $("#id_payment_stripe_sepa_debit-line1").val(),
+                            postal_code: $("#id_payment_stripe_sepa_debit-postal_code").val(),
+                            city: $("#id_payment_stripe_sepa_debit-city").val(),
+                            country: $("#id_payment_stripe_sepa_debit-country").val(),
+                        }
+                    }
+                });
                 return false;
             }
         }

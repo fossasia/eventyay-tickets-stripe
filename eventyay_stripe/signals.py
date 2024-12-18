@@ -21,14 +21,18 @@ from .forms import StripeKeyValidator
 @receiver(register_payment_providers, dispatch_uid="payment_stripe")
 def register_payment_provider(sender, **kwargs):
     from .payment import (
-        StripeAlipay, StripeBancontact, StripeCreditCard, StripeEPS,
-        StripeIdeal, StripeMultibanco, StripePrzelewy24, StripeSettingsHolder,
-        StripeSofort, StripeWeChatPay,
+        StripeAffirm, StripeAlipay, StripeBancontact, StripeCreditCard,
+        StripeEPS, StripeIdeal, StripeKlarna, StripeMobilePay,
+        StripeMultibanco, StripePayPal, StripePrzelewy24, StripeRevolutPay,
+        StripeSEPADirectDebit, StripeSettingsHolder, StripeSofort, StripeSwish,
+        StripeTwint, StripeWeChatPay,
     )
 
     return [
         StripeSettingsHolder, StripeCreditCard, StripeIdeal, StripeAlipay, StripeBancontact,
-        StripeSofort, StripeEPS, StripeMultibanco, StripePrzelewy24, StripeWeChatPay
+        StripeSofort, StripeEPS, StripeMultibanco, StripePrzelewy24, StripeWeChatPay,
+        StripePayPal, StripeRevolutPay, StripeSEPADirectDebit, StripeSwish, StripeTwint,
+        StripeMobilePay, StripeAffirm, StripeKlarna
     ]
 
 
@@ -105,13 +109,6 @@ def register_global_settings(sender, **kwargs):
             required=False,
             validators=(
                 StripeKeyValidator(['sk_live_', 'rk_live_']),
-            ),
-        )),
-        ('payment_stripe_webhook_secret', SecretKeySettingsField(
-            label=_('Stripe Connect: Webhook Endpoint Secret'),
-            required=False,
-            validators=(
-                StripeKeyValidator(['whsec_']),
             ),
         )),
         ('payment_stripe_connect_publishable_key', forms.CharField(

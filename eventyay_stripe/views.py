@@ -32,6 +32,9 @@ from pretix.control.views.event import DecoupleMixin
 from pretix.control.views.organizer import OrganizerDetailViewMixin
 from pretix.helpers import OF_SELF
 from pretix.helpers.http import redirect_to_url
+from pretix.helpers.stripe_utils import (
+    get_stripe_secret_key, get_stripe_webhook_secret_key,
+)
 from pretix.multidomain.urlreverse import build_absolute_uri, eventreverse
 
 from .forms import OrganizerStripeSettingsForm
@@ -179,15 +182,8 @@ def webhook(request, *args, **kwargs):
             return HttpResponse("Empty payload", status=HTTPStatus.BAD_REQUEST)
         event_json = json.loads(payload.decode('utf-8'))
         sig_header = request.META.get("HTTP_STRIPE_SIGNATURE")
-        gs = GlobalSettingsObject()
-        stripe.api_key = (
-            gs.settings.payment_stripe_connect_secret_key
-            or gs.settings.payment_stripe_connect_test_secret_key
-        )
-        webhook_secret_key = gs.settings.payment_stripe_webhook_secret
-        if webhook_secret_key is None:
-            logger.exception('Webhook secret not provided')
-            return HttpResponse("Need Webhook Secret", status=HTTPStatus.BAD_REQUEST)
+        stripe.api_key = get_stripe_secret_key()
+        webhook_secret_key = get_stripe_webhook_secret_key()
         # Verify the event with the Stripe library
         stripe.Webhook.construct_event(
             payload, sig_header, webhook_secret_key

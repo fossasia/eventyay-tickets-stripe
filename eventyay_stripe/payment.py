@@ -633,7 +633,7 @@ class StripeMethod(BasePaymentProvider):
         }
 
     def _init_api(self):
-        stripe.api_version = "2024-10-28.acacia"
+        stripe.api_version = "2024-11-20.acacia"
 
     def _intent_api_args(self, request, payment):
         return {}

@@ -21,6 +21,7 @@ from django.utils.safestring import mark_safe
 from django.utils.timezone import now
 from django.utils.translation import gettext, gettext_lazy as _, pgettext
 from django_countries import countries
+from pydantic import ValidationError
 
 from pretix.base.decimal import round_decimal
 from pretix.base.forms import SecretKeySettingsField
@@ -35,6 +36,9 @@ from pretix.multidomain.urlreverse import build_absolute_uri
 from .forms import StripeKeyValidator
 from .models import ReferencedStripeObject, RegisteredApplePayDomain
 from .tasks import get_stripe_account_key, stripe_verify_domain
+from .validation_models import (
+    LatestCharge, PaymentInfoData, PaymentMethodDetails, Source,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1175,32 +1179,39 @@ class StripeCreditCard(StripeMethod):
 
     def payment_presale_render(self, payment: OrderPayment) -> str:
         pi = payment.info_data or {}
+        card = None
         try:
-            if "latest_charge" in pi:
-                latest_charge = pi.get("latest_charge")
+            payment_data = PaymentInfoData(**pi)  # Validate the payment info data
+
+            if payment_data.latest_charge:
+                latest_charge = payment_data.latest_charge
                 if isinstance(latest_charge, str):
                     latest_charge = stripe.Charge.retrieve(latest_charge, **self.api_config)
-                    card = latest_charge.get("payment_method_details", {}).get("card")
-                elif isinstance(latest_charge, dict):
-                    card = latest_charge.get("payment_method_details", {}).get("card")
-                else:
-                    raise TypeError("'latest_charge' must be either a string or a dictionary.")
-            elif "source" in pi:
-                card = pi["source"]["card"]
-            else:
-                raise KeyError("Missing 'source' attribute in payment info data.")
-        except stripe.error.StripeError as e:
-            logger.exception("Stripe API error occurred: %s", str(e))
+                    validated_charge = LatestCharge(payment_method_details=PaymentMethodDetails(**latest_charge.get("payment_method_details", {})))
+                    card = validated_charge.payment_method_details.card
+                elif isinstance(payment_data.latest_charge, LatestCharge):
+                    card = latest_charge.payment_method_details.card
+
+            # Handle source
+            elif payment_data.source:
+                validated_source = Source(**payment_data.source.model_dump())
+                card = validated_source.card
+
+            if not card:
+                logger.error("Could not parse payment data")
+                return super().payment_presale_render(payment)
+            return (
+                f"{self.public_name}: "
+                f'{card.brand.title()} '
+                f'************{card.last4 or "****"}, '
+                f'{_("expires {month}/{year}").format(month=card.exp_month, year=card.exp_year)}'
+            )
+        except ValidationError as e:
+            logger.exception("Validation error occurred: %s", e)
             return super().payment_presale_render(payment)
         except KeyError as e:
             logger.exception("Could not parse payment data: %s", e)
             return super().payment_presale_render(payment)
-        return (
-            f"{self.public_name}: "
-            f'{card.get("brand", "").title()} '
-            f'************{card.get("last4", "****")}, '
-            f'{_("expires {month}/{year}").format(month=card.get("exp_month"), year=card.get("exp_year"))}'
-        )
 
 
 class StripeIdeal(Redirector):
@@ -1214,31 +1225,27 @@ class StripeIdeal(Redirector):
 
     def payment_presale_render(self, payment: OrderPayment) -> str:
         pi = payment.info_data or {}
+        bank = None
         try:
-            return (
-                gettext("Bank account at {bank}")
-                .format(
-                    bank=(
-                        pi.get("latest_charge", {})
-                        .get("payment_method_details", {})
-                        .get("ideal", {})
-                        .get("bank")
-                        or
-                        pi.get("source", {}).get("ideal", {})
-                        .get("bank", "?")
-                    )
-                )
-                .replace("_", " ")
-                .title()
-            )
+            payment_data = PaymentInfoData(**pi)  # Validate the payment info data
+            if payment_data.latest_charge:
+                latest_charge = payment_data.latest_charge
+                if isinstance(latest_charge, str):
+                    latest_charge = stripe.Charge.retrieve(latest_charge, **self.api_config)
+                if latest_charge.payment_method_details:
+                    payment_method_details = payment_data.latest_charge.payment_method_details
+                    if payment_method_details.ideal:
+                        bank = payment_method_details.ideal.bank
+            elif payment_data.source:
+                bank = payment_data.source.ideal.bank
+            else:
+                bank = None
+            bank = "" if bank is None else bank.replace("_", " ").title()
+        except ValidationError as e:
+            logger.exception("Validation error occurred: %s", e)
+            return super().payment_presale_render(payment)
         except KeyError as e:
-            logger.exception("Missing expected key in payment data: %s", str(e))
-            return super().payment_presale_render(payment)
-        except AttributeError as e:
-            logger.exception("Unexpected structure in payment data: %s", str(e))
-            return super().payment_presale_render(payment)
-        except Exception as e:
-            logger.exception("Unexpected error occurred while parsing payment data: %s", str(e))
+            logger.exception("Could not parse payment data: %s", e)
             return super().payment_presale_render(payment)
 
 
@@ -1309,14 +1316,23 @@ class StripeBancontact(Redirector):
 
     def payment_presale_render(self, payment: OrderPayment) -> str:
         pi = payment.info_data or {}
+        bank = None
         try:
-            return gettext("Bank account at {bank}").format(
-                bank=(
-                    pi.get("latest_charge", {}).get("payment_method_details", {})
-                    .get("bancontact", {}).get("bank_name")
-                    or pi.get("source", {}).get("bancontact", {}).get("bank_name")
-                )
-            )
+            payment_data = PaymentInfoData(**pi)  # validate
+            if payment_data.latest_charge and payment_data.latest_charge.payment_method_details:
+                payment_method_details = payment_data.latest_charge.payment_method_details
+                if payment_method_details.bankcontact:
+                    bank = payment_method_details.bankcontact.bank_name
+            elif payment_data.source:
+                bank = payment_data.source.bankcontact.bank_name
+
+            if not bank:
+                logger.error("Could not parse payment data")
+                return super().payment_presale_render(payment)
+            return gettext(f"Bank account at {bank}")
+        except ValidationError as e:
+            logger.exception("Validation error occurred: %s", e)
+            return super().payment_presale_render(payment)
         except KeyError as e:
             logger.exception("Could not parse payment data %s", e)
             return super().payment_presale_render(payment)
@@ -1395,10 +1411,15 @@ class StripeSofort(StripeMethod):
     def payment_presale_render(self, payment: OrderPayment) -> str:
         pi = payment.info_data or {}
         try:
+            payment_data = PaymentInfoData(**pi)  # Validate the payment info data
+
             return gettext("Bank account {iban} at {bank}").format(
-                iban=f'{pi["source"]["sofort"]["country"]}****{pi["source"]["sofort"]["iban_last4"]}',
-                bank=pi["source"]["sofort"]["bank_name"],
+                iban=f'{payment_data.source.sofort.country}****{payment_data.source.sofort.iban_last4}',
+                bank=payment_data.source.sofort.bank_name
             )
+        except ValidationError as e:
+            logger.exception("Validation error occurred: %s", e)
+            return super().payment_presale_render(payment)
         except KeyError as e:
             logger.exception("Could not parse payment data %s", e)
             return super().payment_presale_render(payment)
@@ -1464,17 +1485,24 @@ class StripeEPS(Redirector):
 
     def payment_presale_render(self, payment: OrderPayment) -> str:
         pi = payment.info_data or {}
+        bank = None
         try:
-            if "latest_charge" in pi and isinstance(pi["latest_charge"], dict):
-                bank = (pi.get("latest_charge", {}).get("payment_method_details", {})
-                        .get("eps", {})).get("bank", "")
-            elif pi.get("source") and isinstance(pi.get("source"), dict):
-                bank = pi.get("source", {}).get("eps", {}).get("bank", "")
+            payment_data = PaymentInfoData(**pi)  # Validate the payment info data
+            if payment_data.latest_charge and payment_data.latest_charge.payment_method_details:
+                payment_method_details = pi.latest_charge.payment_method_details
+                if payment_method_details.eps:
+                    bank = payment_method_details.eps.bank
+            elif pi.source and pi.source.eps:
+                bank = pi.source.eps.bank
             else:
                 bank = ""
             bank = "" if bank is None else bank.replace("_", " ").title()
 
             return gettext(f"Bank account at {bank}")
+
+        except ValidationError as e:
+            logger.exception("Validation error occurred: %s", e)
+            return super().payment_presale_render(payment)
         except KeyError as e:
             logger.exception("Could not parse payment data: %s", e)
             return super().payment_presale_render(payment)
@@ -1538,13 +1566,20 @@ class StripePrzelewy24(Redirector):
 
     def payment_presale_render(self, payment: OrderPayment) -> str:
         pi = payment.info_data or {}
+        bank = None
         try:
-            return gettext('Bank account at {bank}').format(
-                bank=(
-                    pi.get("latest_charge", {}).get("payment_method_details", {}).get("p24", {}).get("bank") or
-                    pi.get("source", {}).get("p24", {}).get("bank", "?")
-                ).replace("_", " ").title()
-            )
+            payment_data = PaymentInfoData(**pi)  # Validate the payment info data
+            if payment_data.latest_charge and payment_data.latest_charge.payment_method_details:
+                payment_method_details = payment_data.latest_charge
+                if payment_method_details.p24:
+                    bank = payment_method_details.p24.bank
+            elif payment_data.source:
+                bank = payment_data.source.p24.bank
+            bank = "" if bank is None else bank.replace("_", " ").title()
+            return gettext(f"Bank account at {bank}")
+        except ValidationError as e:
+            logger.exception("Validation error occurred: %s", e)
+            return super().payment_presale_render(payment)
         except KeyError as e:
             logger.exception('Could not parse payment data: %s', e)
             return super().payment_presale_render(payment)

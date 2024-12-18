@@ -4,6 +4,7 @@ import logging
 import urllib.parse
 
 import stripe
+from http import HTTPStatus
 from django.contrib import messages
 from django.core import signing
 from django.db import transaction
@@ -171,10 +172,12 @@ def oauth_return(request, *args, **kwargs):
 @scopes_disabled()
 def webhook(request, *args, **kwargs):
     # Refer: https://stripe.com/docs/webhooks
-    payload = request.body
-    event_json = json.loads(payload.decode('utf-8'))
-
     try:
+        payload = request.body
+        if not payload:
+            logger.exception('Empty payload on webhook')
+            return HttpResponse("Empty payload", status=HTTPStatus.BAD_REQUEST)
+        event_json = json.loads(payload.decode('utf-8'))
         sig_header = request.META.get("HTTP_STRIPE_SIGNATURE")
         gs = GlobalSettingsObject()
         stripe.api_key = (
@@ -182,18 +185,24 @@ def webhook(request, *args, **kwargs):
             or gs.settings.payment_stripe_connect_test_secret_key
         )
         webhook_secret_key = gs.settings.payment_stripe_webhook_secret
+        if webhook_secret_key is None:
+            logger.exception('Webhook secret not provided')
+            return HttpResponse("Need Webhook Secret", status=HTTPStatus.BAD_REQUEST)
         # Verify the event with the Stripe library
         stripe.Webhook.construct_event(
             payload, sig_header, webhook_secret_key
         )
-    except ValueError as e:
+    except AttributeError as e:
+        logger.exception('Attribute Error on webhook: %s', e)
+        return HttpResponse("Cannot verify Stripe signature", status=HTTPStatus.BAD_REQUEST)
+    except (json.decoder.JSONDecodeError, ValueError) as e:
         # Invalid payload
-        logger.exception('Stripe error on webhook: %s', e)
-        return HttpResponse("Invalid payload", status=400)
+        logger.exception('Invalid payload on webhook: %s', e)
+        return HttpResponse("Invalid payload", status=HTTPStatus.BAD_REQUEST)
     except stripe.error.SignatureVerificationError as e:
         # Invalid signature
         logger.exception('Stripe error on webhook: %s', e)
-        return HttpResponse("Invalid Stripe signature", status=400)
+        return HttpResponse("Invalid Stripe signature", status=HTTPStatus.BAD_REQUEST)
 
     obj = event_json['data']['object']
     if (obj_type := obj['object']) == "charge":
@@ -213,7 +222,7 @@ def webhook(request, *args, **kwargs):
         objid = obj['id']
         lookup_ids = [objid]
     else:
-        return HttpResponse("Not interested in this data type", status=200)
+        return HttpResponse("Not interested in this data type", status=HTTPStatus.OK)
 
     rso = ReferencedStripeObject.objects.select_related('order', 'order__event').filter(
         reference__in=[lid for lid in lookup_ids if lid]
@@ -230,7 +239,7 @@ def webhook(request, *args, **kwargs):
                 )
                 return func(rso.order.event, event_json, objid, rso)
             except ReferencedStripeObject.DoesNotExist:
-                return HttpResponse("Unable to detect event", status=200)
+                return HttpResponse("Unable to detect event", status=HTTPStatus.OK)
         elif hasattr(request, 'event') and func != paymentintent_webhook:
             # This is a legacy integration from back when didn't have ReferencedStripeObject. This can't happen for
             # payment intents or charges connected with payment intents since they didn't exist back then. Our best
@@ -239,7 +248,7 @@ def webhook(request, *args, **kwargs):
 
         # Okay, this is probably not an event that concerns us, maybe other applications talk to the same stripe
         # account
-        return HttpResponse("Unable to detect event", status=200)
+        return HttpResponse("Unable to detect event", status=HTTPStatus.OK)
 
 
 SOURCE_TYPES = {
@@ -265,14 +274,14 @@ def charge_webhook(event, event_json, charge_id, rso):
         )
     except stripe.error.StripeError:
         logger.exception('Stripe error on webhook. Event data: %s', str(event_json))
-        return HttpResponse('Charge not found', status=500)
+        return HttpResponse('Charge not found', status=HTTPStatus.INTERNAL_SERVER_ERROR)
 
     metadata = charge['metadata']
     if 'event' not in metadata:
-        return HttpResponse('Event not given in charge metadata', status=200)
+        return HttpResponse('Event not given in charge metadata', status=HTTPStatus.OK)
 
     if int(metadata['event']) != event.pk:
-        return HttpResponse('Not interested in this event', status=200)
+        return HttpResponse('Not interested in this event', status=HTTPStatus.OK)
 
     if rso and rso.payment:
         order = rso.payment.order
@@ -284,7 +293,7 @@ def charge_webhook(event, event_json, charge_id, rso):
         try:
             order = event.orders.get(id=metadata['order'])
         except Order.DoesNotExist:
-            return HttpResponse('Order not found', status=200)
+            return HttpResponse('Order not found', status=HTTPStatus.OK)
         payment = None
 
     with transaction.atomic():
@@ -351,7 +360,7 @@ def charge_webhook(event, event_json, charge_id, rso):
                     payment.info = str(charge.payment_intent)
                 payment.confirm()
             except LockTimeoutException:
-                return HttpResponse("Lock timeout, please try again.", status=503)
+                return HttpResponse("Lock timeout, please try again.", status=HTTPStatus.SERVICE_UNAVAILABLE)
             except Quota.QuotaExceededException:
                 pass
         elif charge['status'] == 'failed' and payment.state in (
@@ -360,7 +369,7 @@ def charge_webhook(event, event_json, charge_id, rso):
         ):
             payment.fail(info=str(charge))
 
-    return HttpResponse(status=200)
+    return HttpResponse(status=HTTPStatus.OK)
 
 
 def source_webhook(event, event_json, source_id, rso):
@@ -374,10 +383,10 @@ def source_webhook(event, event_json, source_id, rso):
 
     metadata = src['metadata']
     if 'event' not in metadata:
-        return HttpResponse('Event not given in charge metadata', status=200)
+        return HttpResponse('Event not given in charge metadata', status=HTTPStatus.OK)
 
     if int(metadata['event']) != event.pk:
-        return HttpResponse('Not interested in this event', status=200)
+        return HttpResponse('Not interested in this event', status=HTTPStatus.OK)
 
     with transaction.atomic():
         if rso and rso.payment:
@@ -390,7 +399,7 @@ def source_webhook(event, event_json, source_id, rso):
             try:
                 order = event.orders.get(id=metadata['order'])
             except Order.DoesNotExist:
-                return HttpResponse('Order not found', status=200)
+                return HttpResponse('Order not found', status=HTTPStatus.OK)
             payment = None
 
         if payment:
@@ -432,7 +441,7 @@ def source_webhook(event, event_json, source_id, rso):
             payment.state = OrderPayment.PAYMENT_STATE_CANCELED
             payment.save()
 
-    return HttpResponse(status=200)
+    return HttpResponse(status=HTTPStatus.OK)
 
 
 def paymentintent_webhook(event, event_json, paymentintent_id, rso):
@@ -443,7 +452,7 @@ def paymentintent_webhook(event, event_json, paymentintent_id, rso):
         paymentintent = stripe.PaymentIntent.retrieve(paymentintent_id, expand=["latest_charge"], **prov.api_config)
     except stripe.error.StripeError:
         logger.exception('Stripe error on webhook. Event data: %s' % str(event_json))
-        return HttpResponse('Charge not found', status=500)
+        return HttpResponse('Charge not found', status=HTTPStatus.INTERNAL_SERVER_ERROR)
 
     if paymentintent.latest_charge:
         ReferencedStripeObject.objects.get_or_create(
@@ -454,7 +463,7 @@ def paymentintent_webhook(event, event_json, paymentintent_id, rso):
     if event_json["type"] == "payment_intent.payment_failed":
         rso.payment.fail(info=event_json)
 
-    return HttpResponse(status=200)
+    return HttpResponse(status=HTTPStatus.OK)
 
 
 @event_permission_required('can_change_event_settings')

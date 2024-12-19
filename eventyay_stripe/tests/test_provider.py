@@ -3,14 +3,16 @@ from datetime import timedelta
 from decimal import Decimal
 
 import pytest
+import stripe
 from django.test import RequestFactory
 from django.utils.timezone import now
 from django_scopes import scope
-from pretix.base.models import Event, Order, OrderRefund, Organizer
-from pretix.base.payment import PaymentException
 from stripe.error import APIConnectionError, CardError
 
+from eventyay_stripe import __version__
 from eventyay_stripe.payment import StripeCreditCard
+from pretix.base.models import Event, Order, OrderRefund, Organizer
+from pretix.base.payment import PaymentException
 
 
 @pytest.fixture
@@ -81,8 +83,17 @@ def test_perform_success(env, factory, monkeypatch):
         return c
 
     monkeypatch.setattr("stripe.PaymentIntent.create", paymentintent_create)
-
     prov = StripeCreditCard(event)
+    prov.init_api()
+
+    # Verify Stripe API version and app info configuration
+    assert stripe.api_version == "2024-11-20.acacia"
+    assert stripe.app_info == {
+        'name': 'eventyay-stripe',
+        'version': __version__,
+        'url': 'https://github.com/fossasia/eventyay-stripe'
+    }
+
     req = factory.post('/', {
         'stripe_payment_method_id': 'pm_189fTT2eZvKYlo2CvJKzEzeu',
         'stripe_last4': '4242',

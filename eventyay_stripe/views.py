@@ -2,9 +2,9 @@ import hashlib
 import json
 import logging
 import urllib.parse
+from http import HTTPStatus
 
 import stripe
-from http import HTTPStatus
 from django.contrib import messages
 from django.core import signing
 from django.db import transaction

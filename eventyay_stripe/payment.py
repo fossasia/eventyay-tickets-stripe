@@ -42,6 +42,7 @@ from pretix.helpers.urls import build_absolute_uri as build_global_uri
 from pretix.multidomain.urlreverse import build_absolute_uri
 from pretix.presale.views.cart import cart_session
 
+from . import __version__
 from .forms import StripeKeyValidator
 from .models import ReferencedStripeObject, RegisteredApplePayDomain
 from .tasks import get_stripe_account_key, stripe_verify_domain
@@ -634,6 +635,11 @@ class StripeMethod(BasePaymentProvider):
 
     def _init_api(self):
         stripe.api_version = "2024-11-20.acacia"
+        stripe.set_app_info(
+            "eventyay-stripe",
+            version=__version__,
+            url="https://github.com/fossasia/eventyay-stripe"
+        )
 
     def _intent_api_args(self, request, payment):
         return {}

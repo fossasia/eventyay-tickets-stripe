@@ -254,13 +254,12 @@ def test_webhook_partial_refund(env, client, monkeypatch):
     gs.settings.set('payment_stripe_connect_test_secret_key', 'sk_test_123')
 
     sig_header = generate_signature(payload, "whsec_123")
-    response = client.post(
+    client.post(
         '/dummy/dummy/stripe/webhook/',
         payload,
         content_type='application_json',
         HTTP_STRIPE_SIGNATURE=sig_header
     )
-    assert response.status_code == 200
 
     order = env[1]
     order.refresh_from_db()

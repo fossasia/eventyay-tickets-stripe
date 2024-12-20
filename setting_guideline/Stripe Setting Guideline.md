@@ -4,51 +4,50 @@ This guide will walk you through obtaining the necessary keys to integrate Strip
 
 ---
 
-## Step 1: **Get Client ID**
+## Step 1: **Configure Stripe OAuth and Retrievie Client ID**
 
 1. Go to [Stripe Dashboard](https://dashboard.stripe.com/).
 2. Select **Settings** in the upper right corner of the Stripe dashboard
-3. Select **Connect in Product settings** section.
+3. Select **Connect** section  in Product settings.
 
-![image.png](images/image.png)
+    ![image.png](images/image.png)
 
-1. Click [**Onboarding options](https://dashboard.stripe.com/settings/connect/onboarding-options/countries) in Onboard connected accounts section**
+4. Click [Onboarding options](https://dashboard.stripe.com/settings/connect/onboarding-options/countries) in **Onboard connected accounts** section
 
     ![image.png](images/image1.png)
 
-1. In Oauth tab:
+5. In Oauth tab:
 
     ![image.png](images/image2.png)
 
 - Enable OAuth (if it is disable)
 - Add URI for the Stripe OAuth flow (e.g, https://<your-domain>/_stripe/oauth_return/)
+
+    ![image.png](images/add-uri.png)
+
 - Copy Client ID (Test client ID if you are in test mode)
 
-## Step 2: **Get Secret Key, and Publishable Key**
-
-### **Step 2.1: Log in to Your Stripe Dashboard**
-
-1. Go to [Stripe Dashboard](https://dashboard.stripe.com/).
-2. Log in with your credentials.
+    ![image.png](images/client-id.png)
 
 ---
 
-### **Step 2.2: Get Your Publishable Key and Secret Key**
+## Step 2: **Retrievie Secret Key, and Publishable Key**
 
-![image.png](images/image3.png)
-
-1. In the Dashboard, navigate to:
+1. Go to [Stripe Dashboard](https://dashboard.stripe.com/).
+2. Log in with your credentials.
+3. In the Dashboard, navigate to:
     - Click Developers in the left menu → Click **API keys**.
-2. You will see two keys:
+4. You will see two keys:
     - **Publishable Key**: Starts with `pk_`.
     - **Secret Key**: Starts with `sk_`.
-3. Click **Reveal test key** or **Reveal live key** to see the **Secret Key** (depending on your mode):
+
+    ![image.png](images/image3.png)
+
+5. Click **Reveal test key** or **Reveal live key** to see the **Secret Key** (depending on your mode):
     - **Test Mode**: For development and testing purposes.
     - **Live Mode**: For production use.
 
-        ![image.png](images/image4.png)
-
-4. Copy both keys and store them securely.
+6. Copy both keys and store them securely.
 
 ✅ **Example:**
 
@@ -57,15 +56,8 @@ This guide will walk you through obtaining the necessary keys to integrate Strip
 
 ---
 
-## Setp 3: S**et up webhooks**
+## Setp 3: **Retrieve Webhook Secret Key**
 
-**What is a Webhook?**
-
-A webhook lets Stripe send real-time updates (e.g., payment events) to your application.
-
-To connect webhooks, follow the steps in the [“Setting up webhooks”](https://stripe.com/docs/webhooks/go-live#configure-webhook-settings) tutorial.
-
-### **Step 3.1: Create a Webhook Event Destination**
 
 1. In the Dashboard, go to:
     - Click Developers in the left menu → Click **Webhooks**.
@@ -93,25 +85,23 @@ To connect webhooks, follow the steps in the [“Setting up webhooks”](https:
         - `payment_intent.processing`
     - Click Continue button
 
-![image.png](images/image6.png)
+    ![image.png](images/image6.png)
 
-1. Choose Destination type:
+4. Choose Destination type:
     - Destination type: **Webhook endpoint**
     - Click Continue
 
-![image.png](images/image7.png)
+    ![image.png](images/image7.png)
 
-1. Enter the following details:
+5. Enter the following details:
 
-- **Endpoint URL**: The URL in your application that will handle the webhook (e.g., `https://yourdomain.com/_stripe/webhook`).
-- **Description:** add optional description of the destination
-- Click **Create destination**
+    - **Endpoint URL**: The URL in your application that will handle the webhook (e.g., `https://yourdomain.com/_stripe/webhook`).
+    - **Description:** add optional description of the destination
+    - Click **Create destination**
 
-![image.png](images/image8.png)
+    ![image.png](images/image8.png)
 
-## **Step 3.2: Get the Webhook Signing Secret**
-
-1. After creating the webhook endpoint:
+6. After creating the webhook endpoint:
 
     ![image.png](images/image9.png)
 
@@ -119,11 +109,13 @@ To connect webhooks, follow the steps in the [“Setting up webhooks”](https:
 
     - Click **Reveal** under **Signing secret**.
 
-2. Copy the **Signing Secret** (starts with `whsec_`).
+7. Copy the **Signing Secret** (starts with `whsec_`).
 
 ✅ **Example:**
 
 - **Webhook Secret**: `whsec_XXXXXXXXXXXXXXXXXXXXXXXX`
+
+---
 
 ## **Step 4: Add Stripe keys to Eventyay Global Settings**
 
@@ -131,23 +123,19 @@ To connect webhooks, follow the steps in the [“Setting up webhooks”](https:
 2. Access to eventyay admin dashboard
 3. Click to Global settings on the left menu
 
-![image.png](images/image10.png)
+    ![image.png](images/global-settings.png)
 
-1. Scoll down to Stripe settings
+4. Scoll down to Stripe settings
 
-![image.png](images/image11.png)
+    ![image.png](images/image11.png)
 
-- Fill Client ID (from step 1) into field **Stripe Connect: Client ID**
-- Fill API keys (from step 2) into following fields:
-  - If live mode:
-    - **Stripe Connect: Secret key**
-    - **Stripe Connect: Publishable key**
-  - If test mode:
-    - **Stripe Connect: Secret key (test)**
-    - **Stripe Connect: Publishable key (test)**
-- Fill webhook secret key (from step 3) into following field :
-  - **Stripe Webhook: Secret key**
-- Click **Save** button
+Fill in the following fields:
+
+- **Stripe Connect: Client ID**: [Client ID from Step 1]
+- **Stripe Connect: Secret key**: [Secret key from Step 2 (live or test)]
+- **Stripe Connect: Publishable key**: [Publishable key from Step 2 (live or test)]
+- **Stripe Webhook: Secret key**: [Webhook secret key from Step 3]
+- Click **Save**
 
 **Note**:
 

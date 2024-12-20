@@ -128,8 +128,10 @@ You can also refer to the [Stripe documentation](https://docs.stripe.com/webhook
 Fill in the following fields:
 
 - **Stripe Connect: Client ID**: `[Client ID from Step 1]`
-- **Stripe Connect: Secret key**: `[Secret key from Step 2 (live or test)]`
-- **Stripe Connect: Publishable key**: `[Publishable key from Step 2 (live or test)]`
+- **Stripe Connect: Secret key**: `[Secret key from Step 2 (live mode)]`
+- **Stripe Connect: Publishable key**: `[Publishable key from Step 2 (live mode)]`
+- **Stripe Connect: Secret key (test)**: `[Secret key from Step 2 (test mode)]`
+- **Stripe Connect: Publishable key (test)**: `[Publishable key from Step 2 (test mode)]`
 - **Stripe Webhook: Secret key**: `[Webhook secret key from Step 3]`
 - Click **Save**
 

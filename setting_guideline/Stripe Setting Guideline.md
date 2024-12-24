@@ -1,12 +1,14 @@
 # Stripe Payment Settings Instruction
 
-This guide will walk you through obtaining the necessary keys to integrate Stripe with your application.  To get started, you'll need an active Stripe merchant account. If you don't have one yet, you can sign up at [Stripe](http://stripe.com/).
+This guide will walk you through obtaining the necessary keys to integrate Stripe with your application.
+To get started, you'll need an active Stripe merchant account.
+If you don't have one yet, you can sign up at [Stripe](http://stripe.com/).
 
 ---
 
 ## Step 1: **Configure Stripe OAuth and Retrieve Client ID**
 
-You can refer to the [Stripe documentation](https://docs.stripe.com/connect/oauth-standard-accounts#integrating-oauth)
+You can refer to the [Stripe documentation](https://docs.stripe.com/connect/oauth-standard-accounts#integrating-oauth)  or follow the steps below:
 
 1. Go to [Stripe Dashboard](https://dashboard.stripe.com/).
 2. Select **Settings** in the upper right corner of the Stripe dashboard
@@ -64,6 +66,9 @@ You can also refer to the [Stripe documentation](https://docs.stripe.com/webhook
 2. Click **Add destination**
 
     ![add-webhook.png](images/add-webhook.png)
+
+    *Don't worry if your screen looks different - you may have Workbench disabled in [Developer Settings](https://dashboard.stripe.com/settings/developers).*
+    > Workbench provides an at-a-glance summary of your integration's behavior so you can explore your account's API and event history, prototype and build new integrations, and receive critical account alerts
 
 3. Choose the event types:
     - Events from: Your account

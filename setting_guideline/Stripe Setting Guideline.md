@@ -1,8 +1,7 @@
 # Stripe Payment Settings Instruction
 
 This guide will walk you through obtaining the necessary keys to integrate Stripe with your application.
-To get started, you'll need an active Stripe merchant account.
-If you don't have one yet, you can sign up at [Stripe](http://stripe.com/).
+To get started, you'll need an active Stripe merchant account. If you don't have one yet, you can sign up at [Stripe](http://stripe.com/).
 
 ---
 
@@ -11,25 +10,25 @@ If you don't have one yet, you can sign up at [Stripe](http://stripe.com/).
 You can refer to the [Stripe documentation](https://docs.stripe.com/connect/oauth-standard-accounts#integrating-oauth)  or follow the steps below:
 
 1. Go to [Stripe Dashboard](https://dashboard.stripe.com/).
-2. Select **Settings** in the upper right corner of the Stripe dashboard
-3. Select **Connect** section  in Product settings.
+2. Select **Settings** in the upper-right corner of the Stripe dashboard.
+3. Select the **Connect** section in **Product settings**.
 
     ![setting-dashboard.png](images/setting-dashboard.png)
 
-4. Click [Onboarding options](https://dashboard.stripe.com/settings/connect/onboarding-options/countries) in **Onboard connected accounts** section
+4. In **Onboard connected accounts** section, click [Onboarding options](https://dashboard.stripe.com/settings/connect/onboarding-options/countries).
 
     ![connect-setting.png](images/connect-setting.png)
 
-5. In the **Oauth** tab:
+5. In the **OAuth** tab:
 
     ![oauth.png](images/oauth.png)
 
-    - Enable OAuth (if it is disabled)
-    - Add URI for the Stripe OAuth flow (e.g, `https://<your-domain>/_stripe/oauth_return/`)
+    - Enable OAuth (if disabled).
+    - Add the URI for the Stripe OAuth flow (e.g, `https://<your-domain>/_stripe/oauth_return/`).
 
         ![add-uri.png](images/add-uri.png)
 
-    - Copy Client ID (Test client ID if you are in test mode)
+    - Copy Client ID (Test client ID if you are in test mode).
 
         ![client-id.png](images/client-id.png)
 
@@ -42,7 +41,7 @@ You can also refer to the [Stripe documentation](https://docs.stripe.com/keys) o
 1. Go to [Stripe Dashboard](https://dashboard.stripe.com/).
 2. Log in with your credentials.
 3. In the Dashboard, navigate to:
-    - Click Developers in the left menu → Click **API keys**.
+    - Click **Developers** in the left menu → Click **API keys**.
 4. You will see two keys:
     - **Publishable Key**: Starts with `pk_`.
     - **Secret Key**: Starts with `sk_`.
@@ -57,23 +56,21 @@ You can also refer to the [Stripe documentation](https://docs.stripe.com/keys) o
 
 ---
 
-## Step 3: **Retrieve Webhook Secret Key**
+## Step 3: **Retrieve Webhook Signing Key**
 
 You can also refer to the [Stripe documentation](https://docs.stripe.com/webhooks) or follow the steps below:
 
 1. In the Dashboard, go to:
-    - Click Developers in the left menu → Click [Webhooks](https://dashboard.stripe.com/workbench/webhooks).
-2. Click **Add destination**
+    - Click Developers in the left menu → Click [Webhooks](https://dashboard.stripe.com/webhooks).
+2. Click **Create an event destination**.
 
-    ![add-webhook.png](images/add-webhook.png)
-
-    *Don't worry if your screen looks different - you may have Workbench disabled in [Developer Settings](https://dashboard.stripe.com/settings/developers).*
-    > Workbench provides an at-a-glance summary of your integration's behavior so you can explore your account's API and event history, prototype and build new integrations, and receive critical account alerts
+    ![add-webhook.png](images/webhook-create-event-dest.png)
 
 3. Choose the event types:
-    - Events from: Your account
-    - API version: 2024-11-20.acacia
-    - Events:
+    - **Endpoint URL**: Enter the URL in your application that will handle the webhook (e.g., `https://yourdomain.com/_stripe/webhook`).
+    - **Description:** Add optional description of the destination.
+    - **Listen to**: Select **Events on Connected accounts**.
+    - **Select events to listen to**: Choose the following events:
         - `charge.succeeded`
         - `charge.failed`
         - `charge.refunded`
@@ -88,59 +85,44 @@ You can also refer to the [Stripe documentation](https://docs.stripe.com/webhook
         - `payment_intent.payment_failed`
         - `payment_intent.canceled`
         - `payment_intent.processing`
-    - Click Continue button
+    - Click **Add endpoint**.
 
-    ![select-event.png](images/select-event.png)
+    ![webhook-select-events.png](images/webhook-select-events.png)
 
-4. Choose Destination type:
-    - Destination type: **Webhook endpoint**
-    - Click Continue
+4. Retrieve the signing secret:
 
-    ![dest-type.png](images/dest-type.png)
-
-5. Enter the following details:
-
-    - **Endpoint URL**: The URL in your application that will handle the webhook (e.g., `https://yourdomain.com/_stripe/webhook`).
-    - **Description:** Add optional description of the destination
-    - Click **Create destination**
-
-    ![dest-url.png](images/dest-url.png)
-
-6. After creating the webhook endpoint:
-
-    ![webhook-created.png](images/webhook-created.png)
-
-    - Click on the endpoint you just created.
+    ![webhook-signing-key.png](images/webhook-signing-key.png)
 
     - Click **Reveal** under **Signing secret**.
 
-7. Copy the **Signing Secret** (starts with `whsec_`).
+    - Copy the **Signing Secret** (starts with `whsec_`).
 
 ---
 
-## **Step 4: Add Stripe keys to Eventyay Global Settings**
+## **Step 4: Configure Stripe Keys to Eventyay Global Settings**
 
-1. Log in to eventyay as an admin user
-2. Access to eventyay admin dashboard
-3. Click to **Global settings** on the left menu
+1. Log in to eventyay as an admin user.
+2. Access to eventyay admin dashboard.
+3. In the left menu, click to **Global settings**.
 
     ![global-settings.png](images/global-settings.png)
 
-4. Scoll down to **Stripe settings**
+4. Scroll to bottom of the page and fill in the Stripe configuration fields:
 
-    ![highligh-fields.png](images/highligh-fields.png)
-
-Fill in the following fields:
+    ![global-settings-capture.png](images/global-settings-capture.png)
 
 - **Stripe Connect: Client ID**: `[Client ID from Step 1]`
 - **Stripe Connect: Secret key**: `[Secret key from Step 2 (live mode)]`
 - **Stripe Connect: Publishable key**: `[Publishable key from Step 2 (live mode)]`
 - **Stripe Connect: Secret key (test)**: `[Secret key from Step 2 (test mode)]`
 - **Stripe Connect: Publishable key (test)**: `[Publishable key from Step 2 (test mode)]`
-- **Stripe Webhook: Secret key**: `[Webhook secret key from Step 3]`
-- Click **Save**
+- **Stripe Webhook: Signing secret**: `[Webhook signing secret from Step 3]`
+- Click **Save**.
 
-**Note**:
+---
 
-1. You need to enable Stripe payment method for Stripe settings to appear in the Eventyay admin dashboard.
-2. For payment, Some Stripe payment methods need to enable on [organizer’s Stripe account](https://dashboard.stripe.com/settings/payments) first before configuring them in the Eventyay system.
+### **Notes:**
+
+1. Ensure the Stripe payment method is enabled for Stripe settings to appear in the Eventyay admin dashboard.
+2. Certain Stripe payment methods must be enabled on [organizer’s Stripe account](https://dashboard.stripe.com/settings/payments) before configuring them in Eventyay.
+3. If your Stripe dashboard appears different, you might have Workbench enabled under [Developer Settings](https://dashboard.stripe.com/settings/developers). Refer to the [Stripe documentation](https://docs.stripe.com/webhooks) for updated instructions to retrieve the webhook signing key.

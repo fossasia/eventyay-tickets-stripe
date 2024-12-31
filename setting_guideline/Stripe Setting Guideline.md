@@ -56,7 +56,7 @@ You can also refer to the [Stripe documentation](https://docs.stripe.com/keys) o
 
 ---
 
-## Step 3: **Retrieve Webhook Signing Key**
+## Step 3: **Retrieve Webhook Signing Secret Key**
 
 You can also refer to the [Stripe documentation](https://docs.stripe.com/webhooks) or follow the steps below:
 
@@ -95,7 +95,7 @@ You can also refer to the [Stripe documentation](https://docs.stripe.com/webhook
 
     - Click **Reveal** under **Signing secret**.
 
-    - Copy the **Signing Secret** (starts with `whsec_`).
+    - Copy the **Signing secret** (starts with `whsec_`).
 
 ---
 
@@ -125,4 +125,4 @@ You can also refer to the [Stripe documentation](https://docs.stripe.com/webhook
 
 1. Ensure the Stripe payment method is enabled for Stripe settings to appear in the Eventyay admin dashboard.
 2. Certain Stripe payment methods must be enabled on [organizer’s Stripe account](https://dashboard.stripe.com/settings/payments) before configuring them in Eventyay.
-3. If your Stripe dashboard appears different, you might have Workbench enabled under [Developer Settings](https://dashboard.stripe.com/settings/developers). Refer to the [Stripe documentation](https://docs.stripe.com/webhooks) for updated instructions to retrieve the webhook signing key.
+3. If your Stripe dashboard appears different, you might have Workbench enabled under [Developer Settings](https://dashboard.stripe.com/settings/developers). Refer to the [Stripe documentation](https://docs.stripe.com/webhooks) for updated instructions to retrieve the webhook signing secret.

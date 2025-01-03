@@ -6,10 +6,10 @@
 <head>
     <title>{{ settings.INSTANCE_NAME }}</title>
     {% compress css %}
-        <link rel="stylesheet" type="text/x-scss" href="{% static "pretixbase/scss/cachedfiles.scss" %}"/>
+        <link rel="stylesheet" type="text/x-scss" href="{% static 'pretixbase/scss/cachedfiles.scss' %}"/>
     {% endcompress %}
     {% compress js %}
-        <script src="{% static "jquery/js/jquery-3.6.4.min.js" %}"></script>
+        <script src="{% static 'jquery/js/jquery-3.6.4.min.js' %}"></script>
     {% endcompress %}
 </head>
 <body>

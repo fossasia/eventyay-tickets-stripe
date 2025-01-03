@@ -30,7 +30,7 @@
         You need to confirm your payment. Please click the link below to do so or start a new payment.
     {% endblocktrans %}
         <div class="text-right flip">
-            <a href="{% eventurl event "plugins:eventyay_stripe:sca" order=order.code payment=payment.pk hash=payment_hash %}"
+            <a href="{% eventurl event 'plugins:eventyay_stripe:sca' order=order.code payment=payment.pk hash=payment_hash %}"
                     class="btn btn-primary">
                 {% trans "Confirm payment" %}
             </a>

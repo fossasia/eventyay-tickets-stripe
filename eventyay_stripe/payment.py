@@ -624,7 +624,7 @@ class StripeMethod(BasePaymentProvider):
             return {
                 "api_key": (
                     self.settings.connect_secret_key
-                    if self.settings.get('endpoint', 'live') == 'live' and not self.event.testmode
+                    if self.settings.get('endpoint', 'live') == 'live' and not self.event.testmode and self.settings.connect_secret_key != ''
                     else self.settings.connect_test_secret_key
                 ),
                 "stripe_account": self.settings.connect_user_id,

@@ -2,8 +2,10 @@ import datetime
 
 import pytest
 from django.utils.timezone import now
-from pretix.base.models import (CartPosition, Event, Item, ItemCategory,
-                                Organizer, Quota)
+
+from pretix.base.models import (
+    CartPosition, Event, Item, ItemCategory, Organizer, Quota,
+)
 from pretix.testutils.sessions import add_cart_session, get_cart_session_key
 
 

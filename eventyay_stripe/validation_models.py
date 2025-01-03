@@ -59,7 +59,7 @@ class PaymentInfoData(BaseModel):
     source: Optional[Source] = None
 
     @model_validator(mode="before")
-    def check_latest_charge_or_source(self, cls, values):
+    def check_latest_charge_or_source(cls, values):
         latest_charge = values.get("latest_charge")
         source = values.get("source")
         if not latest_charge and not source:

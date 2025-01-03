@@ -34,7 +34,7 @@ def env(client):
     event = Event.objects.create(
         organizer=orga, name='30C3', slug='30c3',
         date_from=datetime.datetime(2013, 12, 26, tzinfo=datetime.timezone.utc),
-        plugins='pretix.plugins.stripe',
+        plugins='pretix.plugins.eventyay_stripe',
         live=True
     )
     event.settings.set('attendee_names_asked', False)

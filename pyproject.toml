@@ -14,7 +14,7 @@ maintainers = [
 ]
 
 dependencies = [
-    'stripe==5.4.*',
+    'stripe==11.3.*',
 ]
 
 [project.entry-points."pretix.plugin"]

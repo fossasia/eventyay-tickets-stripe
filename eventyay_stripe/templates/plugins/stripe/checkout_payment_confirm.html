@@ -28,10 +28,7 @@
     <dl class="dl-horizontal">
         <dt>{% trans "Payment method" %}</dt>
         <dd>{{ provider.public_name }}</dd>
-        {% if provider.method == "giropay" %}
-            <dt>{% trans "Account holder" %}</dt>
-            <dd>{{ request.session.payment_stripe_giropay_account }}</dd>
-        {% elif provider.method == "bancontact" %}
+        {% if provider.method == "bancontact" %}
             <dt>{% trans "Account holder" %}</dt>
             <dd>{{ request.session.payment_stripe_bancontact_account }}</dd>
         {% endif %}

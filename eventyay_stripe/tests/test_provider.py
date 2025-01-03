@@ -3,14 +3,16 @@ from datetime import timedelta
 from decimal import Decimal
 
 import pytest
+import stripe
 from django.test import RequestFactory
 from django.utils.timezone import now
 from django_scopes import scope
 from stripe.error import APIConnectionError, CardError
 
+from eventyay_stripe import __version__
+from eventyay_stripe.payment import StripeCreditCard
 from pretix.base.models import Event, Order, OrderRefund, Organizer
 from pretix.base.payment import PaymentException
-from pretix.plugins.stripe.payment import StripeCC
 
 
 @pytest.fixture
@@ -81,8 +83,17 @@ def test_perform_success(env, factory, monkeypatch):
         return c
 
     monkeypatch.setattr("stripe.PaymentIntent.create", paymentintent_create)
+    prov = StripeCreditCard(event)
+    prov.init_api()
 
-    prov = StripeCC(event)
+    # Verify Stripe API version and app info configuration
+    assert stripe.api_version == "2024-11-20.acacia"
+    assert stripe.app_info == {
+        'name': 'eventyay-stripe',
+        'version': __version__,
+        'url': 'https://github.com/fossasia/eventyay-stripe'
+    }
+
     req = factory.post('/', {
         'stripe_payment_method_id': 'pm_189fTT2eZvKYlo2CvJKzEzeu',
         'stripe_last4': '4242',
@@ -115,7 +126,7 @@ def test_perform_success_zero_decimal_currency(env, factory, monkeypatch):
         return c
 
     monkeypatch.setattr("stripe.PaymentIntent.create", paymentintent_create)
-    prov = StripeCC(event)
+    prov = StripeCreditCard(event)
     req = factory.post('/', {
         'stripe_payment_method_id': 'pm_189fTT2eZvKYlo2CvJKzEzeu',
         'stripe_last4': '4242',
@@ -140,7 +151,7 @@ def test_perform_card_error(env, factory, monkeypatch):
         raise CardError(message='Foo', param='foo', code=100)
 
     monkeypatch.setattr("stripe.PaymentIntent.create", paymentintent_create)
-    prov = StripeCC(event)
+    prov = StripeCreditCard(event)
     req = factory.post('/', {
         'stripe_payment_method_id': 'pm_189fTT2eZvKYlo2CvJKzEzeu',
         'stripe_last4': '4242',
@@ -166,7 +177,7 @@ def test_perform_stripe_error(env, factory, monkeypatch):
         raise CardError(message='Foo', param='foo', code=100)
 
     monkeypatch.setattr("stripe.PaymentIntent.create", paymentintent_create)
-    prov = StripeCC(event)
+    prov = StripeCreditCard(event)
     req = factory.post('/', {
         'stripe_payment_method_id': 'pm_189fTT2eZvKYlo2CvJKzEzeu',
         'stripe_last4': '4242',
@@ -201,7 +212,7 @@ def test_perform_failed(env, factory, monkeypatch):
         return c
 
     monkeypatch.setattr("stripe.PaymentIntent.create", paymentintent_create)
-    prov = StripeCC(event)
+    prov = StripeCreditCard(event)
     req = factory.post('/', {
         'stripe_payment_method_id': 'pm_189fTT2eZvKYlo2CvJKzEzeu',
         'stripe_last4': '4242',
@@ -240,7 +251,7 @@ def test_refund_success(env, factory, monkeypatch):
         'id': 'ch_123345345'
     }))
     order.save()
-    prov = StripeCC(event)
+    prov = StripeCreditCard(event)
     refund = order.refunds.create(
         provider='stripe_cc', amount=order.total, payment=p,
     )
@@ -267,7 +278,7 @@ def test_refund_unavailable(env, factory, monkeypatch):
         'id': 'ch_123345345'
     }))
     order.save()
-    prov = StripeCC(event)
+    prov = StripeCreditCard(event)
     refund = order.refunds.create(
         provider='stripe_cc', amount=order.total, payment=p
     )

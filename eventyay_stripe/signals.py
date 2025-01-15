@@ -104,34 +104,6 @@ def register_global_settings(sender, **kwargs):
                 StripeKeyValidator('ca_'),
             ),
         )),
-        ('payment_stripe_connect_secret_key', SecretKeySettingsField(
-            label=_('Stripe Connect: Secret key'),
-            required=False,
-            validators=(
-                StripeKeyValidator(['sk_live_', 'rk_live_']),
-            ),
-        )),
-        ('payment_stripe_connect_publishable_key', forms.CharField(
-            label=_('Stripe Connect: Publishable key'),
-            required=False,
-            validators=(
-                StripeKeyValidator('pk_live_'),
-            ),
-        )),
-        ('payment_stripe_connect_test_secret_key', SecretKeySettingsField(
-            label=_('Stripe Connect: Secret key (test)'),
-            required=False,
-            validators=(
-                StripeKeyValidator(['sk_test_', 'rk_test_']),
-            ),
-        )),
-        ('payment_stripe_connect_test_publishable_key', forms.CharField(
-            label=_('Stripe Connect: Publishable key (test)'),
-            required=False,
-            validators=(
-                StripeKeyValidator('pk_test_'),
-            ),
-        )),
         ('payment_stripe_connect_app_fee_percent', forms.DecimalField(
             label=_('Stripe Connect: App fee (percent)'),
             required=False,

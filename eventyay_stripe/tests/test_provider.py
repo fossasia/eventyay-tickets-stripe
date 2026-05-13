@@ -11,8 +11,8 @@ from stripe.error import APIConnectionError, CardError
 
 from eventyay_stripe import __version__
 from eventyay_stripe.payment import StripeCreditCard
-from pretix.base.models import Event, Order, OrderRefund, Organizer
-from pretix.base.payment import PaymentException
+from eventyay.base.models import Event, Order, OrderRefund, Organizer
+from eventyay.base.payment import PaymentException
 
 
 @pytest.fixture
@@ -20,7 +20,7 @@ def env():
     o = Organizer.objects.create(name='Dummy', slug='dummy')
     with scope(organizer=o):
         event = Event.objects.create(
-            organizer=o, name='Dummy', slug='dummy',
+            organizer=o, name='Mega Conf', slug='dummy',
             date_from=now(), live=True
         )
         o1 = Order.objects.create(
@@ -77,6 +77,8 @@ def test_perform_success(env, factory, monkeypatch):
         assert kwargs['amount'] == 1337
         assert kwargs['currency'] == 'eur'
         assert kwargs['payment_method'] == 'pm_189fTT2eZvKYlo2CvJKzEzeu'
+        assert kwargs['description'] == 'MEGACONF-FOOBAR'
+        assert kwargs['statement_descriptor_suffix'] == 'MEGACONF-FOOBAR Mega C'
         c = MockedPaymentintent()
         c.status = 'succeeded'
         c.charges.data[0].paid = True
@@ -108,6 +110,44 @@ def test_perform_success(env, factory, monkeypatch):
     prov.execute_payment(req, payment)
     order.refresh_from_db()
     assert order.status == Order.STATUS_PAID
+
+
+@pytest.mark.django_db
+def test_statement_descriptor_uses_sanitized_event_name(env):
+    event, order = env
+    payment = order.payments.create(provider='stripe_cc', amount=order.total)
+    prov = StripeCreditCard(event)
+
+    assert prov.statement_descriptor(payment) == 'MEGACONF-FOOBAR Mega C'
+
+
+@pytest.mark.django_db
+def test_payment_intent_description_uses_sanitized_event_name(env, monkeypatch):
+    event, order = env
+    payment = order.payments.create(provider='stripe_cc', amount=order.total)
+    prov = StripeCreditCard(event)
+    captured = {}
+
+    def paymentintent_create(**kwargs):
+        captured.update(kwargs)
+        return MockedPaymentintent()
+
+    monkeypatch.setattr("stripe.PaymentIntent.create", paymentintent_create)
+
+    prov.intent_factory.create_payment_intent(
+        payment=payment,
+        event=event,
+        payment_method_id='pm_test',
+        method='card',
+        confirmation_method='manual',
+        idempotency_key_seed='seed',
+        kwargs={
+            'statement_descriptor_suffix': prov.statement_descriptor(payment),
+        },
+    )
+
+    assert captured['description'] == 'MEGACONF-FOOBAR'
+    assert captured['statement_descriptor_suffix'] == 'MEGACONF-FOOBAR Mega C'
 
 
 @pytest.mark.django_db

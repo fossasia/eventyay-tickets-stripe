@@ -53,6 +53,10 @@ from .validation_models import (
 logger = logging.getLogger(__name__)
 
 
+def _event_identifier(event: Event) -> str:
+    return re.sub(r'[^a-zA-Z0-9]', '', str(event.name)).upper()
+
+
 def _uses_stripe_connect(event_settings) -> bool:
     return bool(
         event_settings.connect_client_id
@@ -521,7 +525,7 @@ class PaymentIntentFactory:
             'payment_method_types': [method],
             'confirmation_method': confirmation_method,
             'confirm': True,
-            'description': f"{event.slug.upper()}-{payment.order.code}",
+            'description': f"{_event_identifier(event)}-{payment.order.code}",
             'metadata': {
                 "order": str(payment.order.id),
                 "event": event.id,
@@ -656,7 +660,7 @@ class StripeMethod(BasePaymentProvider):
 
     def statement_descriptor(self, payment, length=22):
         return "{event}-{code} {eventname}".format(
-            event=self.event.slug.upper(),
+            event=_event_identifier(self.event),
             code=payment.order.code,
             eventname=re.sub("[^a-zA-Z0-9 ]", "", str(self.event.name)),
         )[:length]
@@ -840,7 +844,7 @@ class StripeMethod(BasePaymentProvider):
                 payment_method_types=[self.method],
                 confirmation_method=self.confirmation_method,
                 confirm=True,
-                description=f"{self.event.slug.upper()}-{payment.order.code}",
+                description=f"{_event_identifier(self.event)}-{payment.order.code}",
                 metadata={
                     "order": str(payment.order.id),
                     "event": self.event.id,

@@ -77,7 +77,7 @@ def test_perform_success(env, factory, monkeypatch):
         assert kwargs['amount'] == 1337
         assert kwargs['currency'] == 'eur'
         assert kwargs['payment_method'] == 'pm_189fTT2eZvKYlo2CvJKzEzeu'
-        assert kwargs['description'] == 'MEGACONF-FOOBAR'
+        assert kwargs['description'] == 'Mega Conf-FOOBAR'
         assert kwargs['statement_descriptor_suffix'] == 'MEGACONF-FOOBAR Mega C'
         c = MockedPaymentintent()
         c.status = 'succeeded'
@@ -86,14 +86,15 @@ def test_perform_success(env, factory, monkeypatch):
 
     monkeypatch.setattr("stripe.PaymentIntent.create", paymentintent_create)
     prov = StripeCreditCard(event)
-    prov.init_api()
+    prov._init_api()
 
     # Verify Stripe API version and app info configuration
     assert stripe.api_version == "2024-11-20.acacia"
     assert stripe.app_info == {
         'name': 'eventyay-stripe',
         'version': __version__,
-        'url': 'https://github.com/fossasia/eventyay-stripe'
+        'url': 'https://github.com/fossasia/eventyay-stripe',
+        'partner_id': None
     }
 
     req = factory.post('/', {
@@ -103,7 +104,7 @@ def test_perform_success(env, factory, monkeypatch):
     })
     req.session = {}
     prov.checkout_prepare(req, {})
-    assert 'payment_stripe_payment_method_id' in req.session
+    assert 'payment_stripe_card_payment_method_id' in req.session
     payment = order.payments.create(
         provider='stripe_cc', amount=order.total
     )
@@ -146,7 +147,7 @@ def test_payment_intent_description_uses_sanitized_event_name(env, monkeypatch):
         },
     )
 
-    assert captured['description'] == 'MEGACONF-FOOBAR'
+    assert captured['description'] == 'Mega Conf-FOOBAR'
     assert captured['statement_descriptor_suffix'] == 'MEGACONF-FOOBAR Mega C'
 
 
@@ -174,7 +175,7 @@ def test_perform_success_zero_decimal_currency(env, factory, monkeypatch):
     })
     req.session = {}
     prov.checkout_prepare(req, {})
-    assert 'payment_stripe_payment_method_id' in req.session
+    assert 'payment_stripe_card_payment_method_id' in req.session
     payment = order.payments.create(
         provider='stripe_cc', amount=order.total
     )
@@ -199,7 +200,7 @@ def test_perform_card_error(env, factory, monkeypatch):
     })
     req.session = {}
     prov.checkout_prepare(req, {})
-    assert 'payment_stripe_payment_method_id' in req.session
+    assert 'payment_stripe_card_payment_method_id' in req.session
     with pytest.raises(PaymentException):
         payment = order.payments.create(
             provider='stripe_cc', amount=order.total
@@ -225,7 +226,7 @@ def test_perform_stripe_error(env, factory, monkeypatch):
     })
     req.session = {}
     prov.checkout_prepare(req, {})
-    assert 'payment_stripe_payment_method_id' in req.session
+    assert 'payment_stripe_card_payment_method_id' in req.session
     with pytest.raises(PaymentException):
         payment = order.payments.create(
             provider='stripe_cc', amount=order.total
@@ -260,7 +261,7 @@ def test_perform_failed(env, factory, monkeypatch):
     })
     req.session = {}
     prov.checkout_prepare(req, {})
-    assert 'payment_stripe_payment_method_id' in req.session
+    assert 'payment_stripe_card_payment_method_id' in req.session
     with pytest.raises(PaymentException):
         payment = order.payments.create(
             provider='stripe_cc', amount=order.total

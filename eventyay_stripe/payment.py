@@ -525,7 +525,7 @@ class PaymentIntentFactory:
             'payment_method_types': [method],
             'confirmation_method': confirmation_method,
             'confirm': True,
-            'description': f"{_event_identifier(event)}-{payment.order.code}",
+            'description': f"{event.name}-{payment.order.code}",
             'metadata': {
                 "order": str(payment.order.id),
                 "event": event.id,
@@ -844,7 +844,7 @@ class StripeMethod(BasePaymentProvider):
                 payment_method_types=[self.method],
                 confirmation_method=self.confirmation_method,
                 confirm=True,
-                description=f"{_event_identifier(self.event)}-{payment.order.code}",
+                description=f"{self.event.name}-{payment.order.code}",
                 metadata={
                     "order": str(payment.order.id),
                     "event": self.event.id,

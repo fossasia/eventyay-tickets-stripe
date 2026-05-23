@@ -54,7 +54,15 @@ logger = logging.getLogger(__name__)
 
 
 def _event_identifier(event: Event) -> str:
-    return re.sub(r'[^a-zA-Z0-9]', '', str(event.name)).upper()
+    identifier = re.sub(r'[^a-zA-Z0-9]', '', str(event.name)).upper()
+    if identifier:
+        return identifier
+
+    slug_identifier = re.sub(r'[^a-zA-Z0-9]', '', str(getattr(event, 'slug', ''))).upper()
+    if slug_identifier:
+        return slug_identifier
+
+    return str(event.id)
 
 
 def _uses_stripe_connect(event_settings) -> bool:

@@ -667,11 +667,20 @@ class StripeMethod(BasePaymentProvider):
         return d
 
     def statement_descriptor(self, payment, length=22):
-        return "{event}-{code} {eventname}".format(
-            event=_event_identifier(self.event),
-            code=payment.order.code,
-            eventname=re.sub("[^a-zA-Z0-9 ]", "", str(self.event.name)),
-        )[:length]
+        code = payment.order.code
+        event_id = _event_identifier(self.event)
+        
+        suffix_len = len(code) + 1
+        if len(event_id) + suffix_len > length:
+            return f"{event_id[:length - suffix_len]}-{code}"
+            
+        base = f"{event_id}-{code}"
+        eventname = re.sub("[^a-zA-Z0-9 ]", "", str(self.event.name)).strip()
+        
+        if eventname:
+            return f"{base} {eventname}"[:length]
+            
+        return base
 
     @property
     def api_config(self):

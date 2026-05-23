@@ -123,7 +123,7 @@ def test_statement_descriptor_uses_sanitized_event_name(env):
 
 
 @pytest.mark.django_db
-def test_payment_intent_description_uses_sanitized_event_name(env, monkeypatch):
+def test_payment_intent_description_uses_raw_event_name(env, monkeypatch):
     event, order = env
     payment = order.payments.create(provider='stripe_cc', amount=order.total)
     prov = StripeCreditCard(event)

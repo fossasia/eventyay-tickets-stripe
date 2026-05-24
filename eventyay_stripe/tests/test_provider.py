@@ -78,7 +78,7 @@ def test_perform_success(env, factory, monkeypatch):
         assert kwargs['currency'] == 'eur'
         assert kwargs['payment_method'] == 'pm_189fTT2eZvKYlo2CvJKzEzeu'
         assert kwargs['description'] == 'Mega Conf-FOOBAR'
-        assert kwargs['statement_descriptor_suffix'] == 'MEGACONF-FOOBAR Mega C'
+        assert kwargs['statement_descriptor_suffix'] == 'DUMMY-FOOBAR Mega Conf'
         c = MockedPaymentintent()
         c.status = 'succeeded'
         c.charges.data[0].paid = True
@@ -119,7 +119,7 @@ def test_statement_descriptor_uses_sanitized_event_name(env):
     payment = order.payments.create(provider='stripe_cc', amount=order.total)
     prov = StripeCreditCard(event)
 
-    assert prov.statement_descriptor(payment) == 'MEGACONF-FOOBAR Mega C'
+    assert prov.statement_descriptor(payment) == 'DUMMY-FOOBAR Mega Conf'
 
 
 @pytest.mark.django_db
@@ -148,7 +148,7 @@ def test_payment_intent_description_uses_raw_event_name(env, monkeypatch):
     )
 
     assert captured['description'] == 'Mega Conf-FOOBAR'
-    assert captured['statement_descriptor_suffix'] == 'MEGACONF-FOOBAR Mega C'
+    assert captured['statement_descriptor_suffix'] == 'DUMMY-FOOBAR Mega Conf'
 
 
 @pytest.mark.django_db

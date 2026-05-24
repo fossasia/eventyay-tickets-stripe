@@ -53,18 +53,6 @@ from .validation_models import (
 logger = logging.getLogger(__name__)
 
 
-def _event_identifier(event: Event) -> str:
-    identifier = re.sub(r'[^a-zA-Z0-9]', '', str(event.name)).upper()
-    if identifier:
-        return identifier
-
-    slug_identifier = re.sub(r'[^a-zA-Z0-9]', '', str(getattr(event, 'slug', ''))).upper()
-    if slug_identifier:
-        return slug_identifier
-
-    return str(event.id)
-
-
 def _uses_stripe_connect(event_settings) -> bool:
     return bool(
         event_settings.connect_client_id
@@ -668,7 +656,7 @@ class StripeMethod(BasePaymentProvider):
 
     def statement_descriptor(self, payment, length=22):
         return "{event}-{code} {eventname}".format(
-            event=_event_identifier(self.event),
+            event=self.event.slug.upper(),
             code=payment.order.code,
             eventname=re.sub("[^a-zA-Z0-9 ]", "", str(self.event.name)),
         )[:length]

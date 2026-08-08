@@ -279,7 +279,7 @@ var stripeObj = {
             $('#scacontainer iframe').on("load", function () {
                 waitingDialog.hide();
             });
-        } else if (payment_intent_redirect_action_handling === 'redirect') {
+        } else if (payment_intent_redirect_action_handling === 'redirect' || payment_intent_redirect_action_handling === 'iframe') {
             window.location.href = payment_intent_next_action_redirect_url;
         }
     },
@@ -334,9 +334,15 @@ $(function () {
         let url = $.trim($("#order_url").html())
         // show message
         if (payment_intent_redirect_action_handling === 'iframe') {
-            window.parent.postMessage('3DS-authentication-complete.' + stt, '*');
-            return;
-        } else if (payment_intent_redirect_action_handling === 'redirect') {
+            if (window !== window.parent) {
+                window.parent.postMessage('3DS-authentication-complete.' + stt, '*');
+                return;
+            } else {
+                payment_intent_redirect_action_handling = 'redirect';
+            }
+        }
+        
+        if (payment_intent_redirect_action_handling === 'redirect') {
             waitingDialog.show(gettext("Confirming your payment …"));
             if (stt === 'p') {
                 window.location.href = url + '?paid=yes';

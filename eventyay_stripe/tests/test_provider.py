@@ -327,3 +327,19 @@ def test_refund_unavailable(env, factory, monkeypatch):
         prov.execute_refund(refund)
     refund.refresh_from_db()
     assert refund.state != OrderRefund.REFUND_STATE_DONE
+
+
+@pytest.mark.django_db
+def test_shred_payment_info_null_source(env):
+    event, order = env
+    order.status = Order.STATUS_PAID
+    p = order.payments.create(provider='stripe_cc', amount=order.total, info=json.dumps({
+        'source': None, 'amount': 1337, 'currency': 'eur', 'id': 'pi_123'
+    }))
+    order.save()
+    prov = StripeCreditCard(event)
+    prov.shred_payment_info(p)
+    p.refresh_from_db()
+    data = json.loads(p.info)
+    assert data['_shredded'] is True
+    assert 'source' not in data

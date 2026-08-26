@@ -1009,19 +1009,21 @@ class StripeMethod(BasePaymentProvider):
             return
         d = json.loads(obj.info)
         new = {}
-        if "source" in d:
+        source = d.get("source")
+        if isinstance(source, dict):
+            card = source.get("card") or {}
             new["source"] = {
-                "id": d["source"].get("id"),
-                "type": d["source"].get("type"),
-                "brand": d["source"].get("brand"),
-                "last4": d["source"].get("last4"),
-                "bank_name": d["source"].get("bank_name"),
-                "bank": d["source"].get("bank"),
-                "bic": d["source"].get("bic"),
+                "id": source.get("id"),
+                "type": source.get("type"),
+                "brand": source.get("brand"),
+                "last4": source.get("last4"),
+                "bank_name": source.get("bank_name"),
+                "bank": source.get("bank"),
+                "bic": source.get("bic"),
                 "card": {
-                    "brand": d["source"].get("card", {}).get("brand"),
-                    "country": d["source"].get("card", {}).get("cuntry"),
-                    "last4": d["source"].get("card", {}).get("last4"),
+                    "brand": card.get("brand"),
+                    "country": card.get("country"),
+                    "last4": card.get("last4"),
                 },
             }
         if "amount" in d:

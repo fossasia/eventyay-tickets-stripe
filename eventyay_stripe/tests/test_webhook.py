@@ -1,27 +1,22 @@
-import hashlib
-import hmac
 import json
-import time
+import os
 from datetime import timedelta
 from decimal import Decimal
 from unittest import mock
 
 import pytest
+
+if not os.environ.get("DJANGO_SETTINGS_MODULE"):
+    pytest.skip("Django settings are not configured", allow_module_level=True)
+
 import stripe
 from django.test import RequestFactory
 from django.utils.timezone import now
 from django_scopes import scopes_disabled
-from pretix.base.models import (
-    Event,
-    Order,
-    OrderPayment,
-    OrderRefund,
-    Organizer,
-    Team,
-    User,
-)
+from eventyay.base.models import Event, Order, OrderPayment, OrderRefund, Organizer, Team, User
 
 from eventyay_stripe.models import ReferencedStripeObject
+from eventyay_stripe.utils import stripe_webhook_signature_header
 from eventyay_stripe.views import GlobalSettingsObject, webhook
 
 
@@ -49,10 +44,7 @@ def env():
 
 def generate_signature(payload, secret, timestamp=None):
     """Generate a valid Stripe webhook signature for testing."""
-    timestamp = timestamp or int(time.time())
-    signed_payload = f"{timestamp}.{payload}"
-    signature = hmac.new(secret.encode("utf-8"), signed_payload.encode("utf-8"), hashlib.sha256).hexdigest()
-    return f"t={timestamp},v1={signature}"
+    return stripe_webhook_signature_header(payload, secret, timestamp)
 
 
 def get_test_charge(order: Order):

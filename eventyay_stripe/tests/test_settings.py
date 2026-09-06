@@ -1,7 +1,12 @@
 import datetime
+import os
 
 import pytest
-from pretix.base.models import Event, Organizer, Team, User
+
+if not os.environ.get("DJANGO_SETTINGS_MODULE"):
+    pytest.skip("Django settings are not configured", allow_module_level=True)
+
+from eventyay.base.models import Event, Organizer, Team, User
 
 valid_secret_key_values = [
     "sk_",
@@ -35,7 +40,7 @@ def env(client):
         name="30C3",
         slug="30c3",
         date_from=datetime.datetime(2013, 12, 26, tzinfo=datetime.UTC),
-        plugins="pretix.plugins.eventyay_stripe",
+        plugins="eventyay_stripe",
         live=True,
     )
     event.settings.set("attendee_names_asked", False)

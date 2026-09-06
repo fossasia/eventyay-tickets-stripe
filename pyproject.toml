@@ -20,6 +20,8 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "ruff>=0.9",
+    "pytest>=8",
+    "pydantic>=2",
 ]
 
 [project.entry-points."pretix.plugin"]

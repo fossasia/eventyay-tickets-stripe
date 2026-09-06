@@ -2,6 +2,8 @@ from django import forms
 from django.utils.translation import gettext_lazy as _
 from eventyay.base.forms import SettingsForm
 
+from .utils import stripe_key_is_valid
+
 
 class StripeKeyValidator:
     def __init__(self, prefix):
@@ -13,7 +15,7 @@ class StripeKeyValidator:
             assert isinstance(prefix, str)
 
     def __call__(self, value):
-        if not any(value.startswith(p) for p in self._prefixes):
+        if not stripe_key_is_valid(value, self._prefixes):
             raise forms.ValidationError(
                 _('The provided key "%(value)s" does not look valid. It should start with "%(prefix)s".'),
                 code="invalid-stripe-key",

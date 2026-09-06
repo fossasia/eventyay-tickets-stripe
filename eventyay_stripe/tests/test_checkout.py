@@ -1,16 +1,32 @@
 import datetime
+import os
 
 import pytest
+from django.utils.crypto import get_random_string
 from django.utils.timezone import now
-from pretix.base.models import (
-    CartPosition,
-    Event,
-    Item,
-    ItemCategory,
-    Organizer,
-    Quota,
-)
-from pretix.testutils.sessions import add_cart_session, get_cart_session_key
+
+if not os.environ.get("DJANGO_SETTINGS_MODULE"):
+    pytest.skip("Django settings are not configured", allow_module_level=True)
+
+from eventyay.base.models import CartPosition, Event, Organizer, Product, ProductCategory, Quota
+
+
+def add_cart_session(client, event, data):
+    new_id = get_random_string(length=32)
+    session = client.session
+    session[f"current_cart_event_{event.pk}"] = new_id
+    if "carts" not in session:
+        session["carts"] = {}
+    session["carts"][new_id] = data
+    session.save()
+    return new_id
+
+
+def get_cart_session_key(client, event):
+    cart_id = client.session.get(f"current_cart_event_{event.pk}")
+    if cart_id:
+        return cart_id
+    return add_cart_session(client, event, {})
 
 
 class MockedCharge:
@@ -42,15 +58,15 @@ def env(client):
         name="30C3",
         slug="30c3",
         date_from=datetime.datetime(now().year + 1, 12, 26, tzinfo=datetime.UTC),
-        plugins="pretix.plugins.stripe",
+        plugins="eventyay_stripe",
         live=True,
     )
-    category = ItemCategory.objects.create(event=event, name="Everything", position=0)
+    category = ProductCategory.objects.create(event=event, name="Everything", position=0)
     quota_tickets = Quota.objects.create(event=event, name="Tickets", size=5)
-    ticket = Item.objects.create(
+    ticket = Product.objects.create(
         event=event, name="Early-bird ticket", category=category, default_price=23, admission=True
     )
-    quota_tickets.items.add(ticket)
+    quota_tickets.products.add(ticket)
     event.settings.set("attendee_names_asked", False)
     event.settings.set("payment_stripe__enabled", True)
     add_cart_session(client, event, {"email": "admin@localhost"})
@@ -76,7 +92,7 @@ def test_payment(env, monkeypatch):
     CartPosition.objects.create(
         event=ticket.event,
         cart_id=session_key,
-        item=ticket,
+        product=ticket,
         price=13.37,
         expires=now() + datetime.timedelta(minutes=10),
     )

@@ -1,7 +1,6 @@
 import hashlib
 import json
 import logging
-import re
 import urllib.parse
 from collections import OrderedDict
 from decimal import Decimal
@@ -51,6 +50,7 @@ from . import __version__
 from .forms import StripeKeyValidator
 from .models import ReferencedStripeObject, RegisteredApplePayDomain
 from .tasks import get_stripe_account_key, stripe_verify_domain
+from .utils import stripe_decimal_to_int, stripe_statement_descriptor
 from .validation_models import (
     LatestCharge,
     PaymentInfoData,
@@ -635,7 +635,7 @@ class StripeMethod(BasePaymentProvider):
 
     def _decimal_to_int(self, amount):
         places = settings.CURRENCY_PLACES.get(self.event.currency, 2)
-        return int(amount * 10**places)
+        return stripe_decimal_to_int(amount, places)
 
     def _get_amount(self, payment):
         return self._decimal_to_int(payment.amount)
@@ -660,11 +660,7 @@ class StripeMethod(BasePaymentProvider):
         return d
 
     def statement_descriptor(self, payment, length=22):
-        return "{event}-{code} {eventname}".format(
-            event=self.event.slug.upper(),
-            code=payment.order.code,
-            eventname=re.sub("[^a-zA-Z0-9 ]", "", str(self.event.name)),
-        )[:length]
+        return stripe_statement_descriptor(self.event.slug, payment.order.code, self.event.name, length)
 
     @property
     def api_config(self):

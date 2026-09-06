@@ -1,8 +1,13 @@
 import json
+import os
 from datetime import timedelta
 from decimal import Decimal
 
 import pytest
+
+if not os.environ.get("DJANGO_SETTINGS_MODULE"):
+    pytest.skip("Django settings are not configured", allow_module_level=True)
+
 import stripe
 from django.test import RequestFactory
 from django.utils.timezone import now

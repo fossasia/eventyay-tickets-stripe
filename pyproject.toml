@@ -14,7 +14,19 @@ maintainers = [
 ]
 
 dependencies = [
-    'stripe==11.3.*',
+    "stripe==11.3.*",
+    "pydantic>=2",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=9.1.1",
+    "pytest-rerunfailures>=16.6",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.16.5",
 ]
 
 [project.entry-points."pretix.plugin"]
@@ -36,3 +48,7 @@ version = {attr = "eventyay_stripe.__version__"}
 [tool.setuptools.packages.find]
 include = ["eventyay*"]
 namespaces = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

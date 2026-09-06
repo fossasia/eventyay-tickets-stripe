@@ -335,7 +335,7 @@ $(function () {
         // show message
         if (payment_intent_redirect_action_handling === 'iframe') {
             if (window !== window.parent) {
-                window.parent.postMessage('3DS-authentication-complete.' + stt, '*');
+                window.parent.postMessage('3DS-authentication-complete.' + stt, window.location.origin);
                 return;
             } else {
                 payment_intent_redirect_action_handling = 'redirect';
@@ -369,6 +369,9 @@ $(function () {
     }
 
     $(window).on("message onmessage", function(e) {
+        if (e.originalEvent.origin !== window.location.origin) {
+            return;
+        }
         if (typeof e.originalEvent.data === "string" && e.originalEvent.data.startsWith('3DS-authentication-complete.')) {
             waitingDialog.show(gettext("Confirming your payment …"));
             $('#scacontainer').hide();

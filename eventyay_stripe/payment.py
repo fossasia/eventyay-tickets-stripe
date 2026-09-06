@@ -120,17 +120,25 @@ class StripeSettingsHolder(BasePaymentProvider):
         request.session["payment_stripe_oauth_event"] = request.event.pk
         if "payment_stripe_oauth_token" not in request.session:
             request.session["payment_stripe_oauth_token"] = get_random_string(32)
-        authorize_url = stripe.OAuth.authorize_url(
-            client_id=self.settings.connect_client_id,
-            response_type='code',
-            scope='read_write',
-            state=request.session["payment_stripe_oauth_token"],
-            redirect_uri=build_global_uri("plugins:eventyay_stripe:oauth.return")
-        )
+        country = str(guess_country(request.event) or '')
+        kwargs = {
+            'client_id': self.settings.connect_client_id,
+            'response_type': 'code',
+            'scope': 'read_write',
+            'state': request.session["payment_stripe_oauth_token"],
+            'redirect_uri': build_global_uri("plugins:eventyay_stripe:oauth.return")
+        }
+        if country:
+            kwargs['stripe_user'] = {'country': country}
+
+        authorize_url = stripe.OAuth.authorize_url(**kwargs)
+        logger.info(f"Generated Stripe Connect OAuth URL: {authorize_url}")
         return authorize_url
 
     def settings_content_render(self, request):
-        if not self.settings.connect_client_id:
+        has_secret = bool(self.settings.connect_secret_key or self.settings.connect_test_secret_key)
+
+        if not self.settings.connect_client_id or not has_secret:
             # Global Stripe Connect credentials not configured by administrator
             return (
                 "<div class='alert alert-warning'>{}</div>"
@@ -212,8 +220,13 @@ class StripeSettingsHolder(BasePaymentProvider):
             ]
         else:
             moto_settings = []
+        if getattr(self, 'event', None):
+            has_secret = bool(self.settings.connect_secret_key or self.settings.connect_test_secret_key)
+        else:
+            # Fallback if no event available (which shouldn't happen for event settings)
+            has_secret = bool(self.settings.connect_secret_key or self.settings.connect_test_secret_key)
 
-        if not self.settings.connect_client_id:
+        if not self.settings.connect_client_id or not has_secret:
             # Global Stripe Connect not configured — no fields to show
             return {}
 

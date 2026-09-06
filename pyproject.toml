@@ -17,6 +17,11 @@ dependencies = [
     'stripe==11.3.*',
 ]
 
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.9",
+]
+
 [project.entry-points."pretix.plugin"]
 eventyay_stripe = "eventyay_stripe:PretixPluginMeta"
 
@@ -41,3 +46,20 @@ version = {attr = "eventyay_stripe.__version__"}
 [tool.setuptools.packages.find]
 include = ["eventyay*"]
 namespaces = false
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = ["**/migrations"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["E501", "UP031"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/migrations/*.py" = ["E501"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"

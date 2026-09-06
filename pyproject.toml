@@ -70,7 +70,7 @@ line-ending = "auto"
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "eventyay.config.settings"
-testpaths = ["tests", "eventyay_stripe/tests"]
+testpaths = ["tests"]
 pythonpath = ["."]
 
 [tool.pytest_env]

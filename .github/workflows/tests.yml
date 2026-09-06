@@ -87,4 +87,4 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/../eventyay/app
         run: |
           . ../eventyay/app/.venv/bin/activate
-          pytest --reruns 3
+          pytest tests --reruns 3

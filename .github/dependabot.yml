@@ -13,11 +13,3 @@ updates:
       interval: "weekly"
     open-pull-requests-limit: 10
     target-branch: "dev"
-    versioning-strategy: increase
-    ignore:
-      # Stay on the Stripe SDK range Eventyay already pins.
-      - dependency-name: "stripe"
-        versions: [">=11.4.0"]
-      # Ignore all setuptools updates; issue is not version-specific.
-      # Can be removed once Dependabot handles no-op uv updates.
-      - dependency-name: "setuptools"

@@ -48,6 +48,7 @@ from pydantic import ValidationError
 from . import __version__
 from .models import ReferencedStripeObject, RegisteredApplePayDomain
 from .tasks import get_stripe_account_key, stripe_verify_domain
+from .utils import shredded_stripe_payment_info
 from .validation_models import (
     LatestCharge,
     PaymentInfoData,
@@ -985,32 +986,7 @@ class StripeMethod(BasePaymentProvider):
         if not obj.info:
             return
         d = json.loads(obj.info)
-        new = {}
-        if "source" in d:
-            new["source"] = {
-                "id": d["source"].get("id"),
-                "type": d["source"].get("type"),
-                "brand": d["source"].get("brand"),
-                "last4": d["source"].get("last4"),
-                "bank_name": d["source"].get("bank_name"),
-                "bank": d["source"].get("bank"),
-                "bic": d["source"].get("bic"),
-                "card": {
-                    "brand": d["source"].get("card", {}).get("brand"),
-                    "country": d["source"].get("card", {}).get("cuntry"),
-                    "last4": d["source"].get("card", {}).get("last4"),
-                },
-            }
-        if "amount" in d:
-            new["amount"] = d["amount"]
-        if "currency" in d:
-            new["currency"] = d["currency"]
-        if "status" in d:
-            new["status"] = d["status"]
-        if "id" in d:
-            new["id"] = d["id"]
-
-        new["_shredded"] = True
+        new = shredded_stripe_payment_info(d)
         obj.info = json.dumps(new)
         obj.save(update_fields=["info"])
 

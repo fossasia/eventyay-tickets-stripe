@@ -132,7 +132,7 @@ class StripeSettingsHolder(BasePaymentProvider):
             kwargs['stripe_user'] = {'country': country}
 
         authorize_url = stripe.OAuth.authorize_url(**kwargs)
-        logger.info(f"Generated Stripe Connect OAuth URL: {authorize_url}")
+        logger.info("Generated Stripe Connect OAuth URL")
         return authorize_url
 
     def settings_content_render(self, request):
@@ -168,7 +168,8 @@ class StripeSettingsHolder(BasePaymentProvider):
             )
 
         # Already connected — show account info and disconnect button
-        account_name = self.settings.connect_user_name or self.settings.connect_user_id
+        from django.utils.html import escape
+        account_name = escape(self.settings.connect_user_name or self.settings.connect_user_id)
         return (
             "<div class='alert alert-success'>"
             "<span class='fa fa-check-circle'></span> {connected_msg}"
@@ -221,7 +222,7 @@ class StripeSettingsHolder(BasePaymentProvider):
         else:
             moto_settings = []
         if getattr(self, 'event', None):
-            has_secret = bool(self.settings.connect_secret_key or self.settings.connect_test_secret_key)
+            has_secret = bool(self.settings.connect_secret_key if self.settings.get('endpoint', 'live') == 'live' and not self.event.testmode else self.settings.connect_test_secret_key)
         else:
             # Fallback if no event available (which shouldn't happen for event settings)
             has_secret = bool(self.settings.connect_secret_key or self.settings.connect_test_secret_key)
@@ -636,11 +637,7 @@ class StripeMethod(BasePaymentProvider):
 
     def _prepare_api_connect_args(self, payment):
         d = {}
-        if (
-            self.settings.connect_client_id
-            and self.settings.connect_user_id
-            and not self.settings.secret_key
-        ):
+        if _uses_stripe_connect(self.settings):
             fee = Decimal("0.00")
             if self.settings.get("connect_app_fee_percent", as_type=Decimal):
                 fee = round_decimal(

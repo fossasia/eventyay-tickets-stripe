@@ -75,28 +75,36 @@ def _stripe_key_test(env, field, value, is_valid):
 
 
 @pytest.mark.django_db
-@pytest.mark.skip(reason="Control payment settings POST needs Eventyay multidomain/session setup beyond this plugin suite")
+@pytest.mark.skip(
+    reason="Control payment settings POST needs Eventyay multidomain/session setup beyond this plugin suite"
+)
 @pytest.mark.parametrize("value", invalid_secret_key_values)
 def test_settings_secret_key_invalid(env, value):
     _stripe_key_test(env, "secret_key", value, False)
 
 
 @pytest.mark.django_db
-@pytest.mark.skip(reason="Control payment settings POST needs Eventyay multidomain/session setup beyond this plugin suite")
+@pytest.mark.skip(
+    reason="Control payment settings POST needs Eventyay multidomain/session setup beyond this plugin suite"
+)
 @pytest.mark.parametrize("value", invalid_publishable_key_values)
 def test_settings_publishable_key_invalid(env, value):
     _stripe_key_test(env, "publishable_key", value, False)
 
 
 @pytest.mark.django_db
-@pytest.mark.skip(reason="Control payment settings POST needs Eventyay multidomain/session setup beyond this plugin suite")
+@pytest.mark.skip(
+    reason="Control payment settings POST needs Eventyay multidomain/session setup beyond this plugin suite"
+)
 @pytest.mark.parametrize("value", valid_secret_key_values)
 def test_settings_secret_key_valid(env, value):
     _stripe_key_test(env, "secret_key", value, True)
 
 
 @pytest.mark.django_db
-@pytest.mark.skip(reason="Control payment settings POST needs Eventyay multidomain/session setup beyond this plugin suite")
+@pytest.mark.skip(
+    reason="Control payment settings POST needs Eventyay multidomain/session setup beyond this plugin suite"
+)
 @pytest.mark.parametrize("value", valid_publishable_key_values)
 def test_settings_publishable_key_valid(env, value):
     _stripe_key_test(env, "publishable_key", value, True)

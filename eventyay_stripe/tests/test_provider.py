@@ -16,7 +16,6 @@ from eventyay.base.models import Event, Order, OrderRefund, Organizer
 from eventyay.base.payment import PaymentException
 from stripe.error import APIConnectionError, CardError
 
-from eventyay_stripe import __version__
 from eventyay_stripe.payment import StripeCreditCard
 
 

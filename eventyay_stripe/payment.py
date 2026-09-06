@@ -551,8 +551,8 @@ class PaymentIntentFactory:
                         'country': getattr(ia.country, 'code', str(ia.country)) or 'IN',
                     }
                 }
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Could not set shipping information for payment intent: %s", str(e))
         base_params.update(kwargs)
         return stripe.PaymentIntent.create(**base_params)
 

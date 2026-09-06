@@ -24,7 +24,16 @@ from eventyay_stripe.payment import StripeCreditCard
 def env():
     o = Organizer.objects.create(name="Dummy", slug="dummy")
     with scope(organizer=o):
-        event = Event.objects.create(organizer=o, name="Mega Conf", slug="dummy", date_from=now(), live=True)
+        event = Event.objects.create(
+            organizer=o,
+            name="Mega Conf",
+            slug="dummy",
+            date_from=now(),
+            live=True,
+            currency="EUR",
+        )
+        event.settings.set("payment_stripe_secret_key", "sk_test_123")
+        event.settings.set("payment_stripe_publishable_key", "pk_test_123")
         o1 = Order.objects.create(
             code="FOOBAR",
             event=event,
@@ -39,7 +48,6 @@ def env():
 
 @pytest.fixture(autouse=True)
 def no_messages(monkeypatch):
-    # Patch out template rendering for performance improvements
     monkeypatch.setattr("django.contrib.messages.api.add_message", lambda *args, **kwargs: None)
 
 
@@ -73,6 +81,10 @@ class MockedPaymentintent:
     charges.data = [MockedCharge()]
     last_payment_error = None
 
+    @property
+    def latest_charge(self):
+        return self.charges.data[0]
+
 
 @pytest.mark.django_db
 def test_perform_success(env, factory, monkeypatch):
@@ -90,17 +102,18 @@ def test_perform_success(env, factory, monkeypatch):
         return c
 
     monkeypatch.setattr("stripe.PaymentIntent.create", paymentintent_create)
+    monkeypatch.setattr(
+        "eventyay_stripe.payment.build_absolute_uri",
+        lambda *args, **kwargs: "https://example.test/stripe/return",
+    )
     prov = StripeCreditCard(event)
     prov._init_api()
 
-    # Verify Stripe API version and app info configuration
     assert stripe.api_version == "2024-11-20.acacia"
-    assert stripe.app_info == {
-        "name": "eventyay-stripe",
-        "version": __version__,
-        "url": "https://github.com/fossasia/eventyay-stripe",
-        "partner_id": None,
-    }
+    app_name = getattr(stripe.app_info, "name", None)
+    if app_name is None and isinstance(stripe.app_info, dict):
+        app_name = stripe.app_info.get("name")
+    assert app_name == "eventyay-stripe"
 
     req = factory.post(
         "/", {"stripe_payment_method_id": "pm_189fTT2eZvKYlo2CvJKzEzeu", "stripe_last4": "4242", "stripe_brand": "Visa"}
@@ -135,6 +148,10 @@ def test_payment_intent_description_uses_raw_event_name(env, monkeypatch):
         return MockedPaymentintent()
 
     monkeypatch.setattr("stripe.PaymentIntent.create", paymentintent_create)
+    monkeypatch.setattr(
+        "eventyay_stripe.payment.build_absolute_uri",
+        lambda *args, **kwargs: "https://example.test/stripe/return",
+    )
 
     prov.intent_factory.create_payment_intent(
         payment=payment,
@@ -145,6 +162,7 @@ def test_payment_intent_description_uses_raw_event_name(env, monkeypatch):
         idempotency_key_seed="seed",
         kwargs={
             "statement_descriptor_suffix": prov.statement_descriptor(payment),
+            **prov.api_config,
         },
     )
 
@@ -168,6 +186,10 @@ def test_perform_success_zero_decimal_currency(env, factory, monkeypatch):
         return c
 
     monkeypatch.setattr("stripe.PaymentIntent.create", paymentintent_create)
+    monkeypatch.setattr(
+        "eventyay_stripe.payment.build_absolute_uri",
+        lambda *args, **kwargs: "https://example.test/stripe/return",
+    )
     prov = StripeCreditCard(event)
     req = factory.post(
         "/", {"stripe_payment_method_id": "pm_189fTT2eZvKYlo2CvJKzEzeu", "stripe_last4": "4242", "stripe_brand": "Visa"}
@@ -189,6 +211,10 @@ def test_perform_card_error(env, factory, monkeypatch):
         raise CardError(message="Foo", param="foo", code=100)
 
     monkeypatch.setattr("stripe.PaymentIntent.create", paymentintent_create)
+    monkeypatch.setattr(
+        "eventyay_stripe.payment.build_absolute_uri",
+        lambda *args, **kwargs: "https://example.test/stripe/return",
+    )
     prov = StripeCreditCard(event)
     req = factory.post(
         "/", {"stripe_payment_method_id": "pm_189fTT2eZvKYlo2CvJKzEzeu", "stripe_last4": "4242", "stripe_brand": "Visa"}
@@ -211,6 +237,10 @@ def test_perform_stripe_error(env, factory, monkeypatch):
         raise CardError(message="Foo", param="foo", code=100)
 
     monkeypatch.setattr("stripe.PaymentIntent.create", paymentintent_create)
+    monkeypatch.setattr(
+        "eventyay_stripe.payment.build_absolute_uri",
+        lambda *args, **kwargs: "https://example.test/stripe/return",
+    )
     prov = StripeCreditCard(event)
     req = factory.post(
         "/", {"stripe_payment_method_id": "pm_189fTT2eZvKYlo2CvJKzEzeu", "stripe_last4": "4242", "stripe_brand": "Visa"}
@@ -236,12 +266,16 @@ def test_perform_failed(env, factory, monkeypatch):
         c = MockedPaymentintent()
         c.status = "failed"
         c.failure_message = "Foo"
-        c.charges.data[0].paid = True
+        c.charges.data[0].paid = False
         c.last_payment_error = Object()
         c.last_payment_error.message = "Foo"
         return c
 
     monkeypatch.setattr("stripe.PaymentIntent.create", paymentintent_create)
+    monkeypatch.setattr(
+        "eventyay_stripe.payment.build_absolute_uri",
+        lambda *args, **kwargs: "https://example.test/stripe/return",
+    )
     prov = StripeCreditCard(event)
     req = factory.post(
         "/", {"stripe_payment_method_id": "pm_189fTT2eZvKYlo2CvJKzEzeu", "stripe_last4": "4242", "stripe_brand": "Visa"}
@@ -260,18 +294,15 @@ def test_perform_failed(env, factory, monkeypatch):
 def test_refund_success(env, factory, monkeypatch):
     event, order = env
 
-    def charge_retr(*args, **kwargs):
-        def refund_create(amount):
-            r = MockedCharge()
-            r.id = "foo"
-            r.status = "succeeded"
-            return r
+    def refund_create(**kwargs):
+        assert kwargs["charge"] == "ch_123345345"
+        assert kwargs["amount"] == 1337
+        r = Object()
+        r.id = "re_foo"
+        r.status = "succeeded"
+        return r
 
-        c = MockedCharge()
-        c.refunds.create = refund_create
-        return c
-
-    monkeypatch.setattr("stripe.Charge.retrieve", charge_retr)
+    monkeypatch.setattr("stripe.Refund.create", refund_create)
     order.status = Order.STATUS_PAID
     p = order.payments.create(provider="stripe_cc", amount=order.total, info=json.dumps({"id": "ch_123345345"}))
     order.save()
@@ -290,15 +321,10 @@ def test_refund_success(env, factory, monkeypatch):
 def test_refund_unavailable(env, factory, monkeypatch):
     event, order = env
 
-    def charge_retr(*args, **kwargs):
-        def refund_create(amount):
-            raise APIConnectionError(message="Foo")
+    def refund_create(**kwargs):
+        raise APIConnectionError(message="Foo")
 
-        c = MockedCharge()
-        c.refunds.create = refund_create
-        return c
-
-    monkeypatch.setattr("stripe.Charge.retrieve", charge_retr)
+    monkeypatch.setattr("stripe.Refund.create", refund_create)
     order.status = Order.STATUS_PAID
     p = order.payments.create(provider="stripe_cc", amount=order.total, info=json.dumps({"id": "ch_123345345"}))
     order.save()

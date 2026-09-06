@@ -521,7 +521,7 @@ class PaymentIntentFactory:
             'payment_method_types': [method],
             'confirmation_method': confirmation_method,
             'confirm': True,
-            'description': f"{event.name}-{payment.order.code}",
+            'description': f"{event.slug.upper()}-{payment.order.code}",
             'metadata': {
                 "order": str(payment.order.id),
                 "event": event.id,
@@ -539,10 +539,27 @@ class PaymentIntentFactory:
             ),
             'expand': ["latest_charge"]
         }
+        try:
+            if hasattr(payment.order, 'invoice_address') and payment.order.invoice_address:
+                ia = payment.order.invoice_address
+                base_params['shipping'] = {
+                    'name': ia.name or payment.order.email or 'Customer',
+                    'address': {
+                        'line1': ia.street or 'N/A',
+                        'city': ia.city or 'N/A',
+                        'postal_code': ia.zipcode or '00000',
+                        'country': getattr(ia.country, 'code', str(ia.country)) or 'IN',
+                    }
+                }
+        except Exception as e:
+            logger.warning("Could not set shipping information for payment intent: %s", str(e))
+            raise PaymentException(
+                _("Could not extract shipping information from the order. This is required for payment compliance.")
+            )
         base_params.update(kwargs)
         return stripe.PaymentIntent.create(**base_params)
 
-    def retrieve_payment_intent(payment_info, kwargs):
+    def retrieve_payment_intent(self, payment_info, **kwargs):
         return stripe.PaymentIntent.retrieve(
             payment_info['id'],
             expand=["latest_charge"],
@@ -840,7 +857,7 @@ class StripeMethod(BasePaymentProvider):
                 payment_method_types=[self.method],
                 confirmation_method=self.confirmation_method,
                 confirm=True,
-                description=f"{self.event.name}-{payment.order.code}",
+                description=f"{self.event.slug.upper()}-{payment.order.code}",
                 metadata={
                     "order": str(payment.order.id),
                     "event": self.event.id,
@@ -1263,7 +1280,7 @@ class StripeCreditCard(StripeMethod):
             else:
                 payment_info = json.loads(payment.info)
                 if not intent:
-                    intent = self.intent_factory.retrieve_payment_intent(payment_info)
+                    intent = self.intent_factory.retrieve_payment_intent(payment_info, **self.api_config)
 
         except stripe.error.CardError as e:
             self.error_handler.handle_card_error(e, payment)

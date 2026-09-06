@@ -2,10 +2,10 @@
 name = "eventyay-stripe"
 dynamic = ["version"]
 description = "Integrates eventyay-stripe with eventyay"
-readme = "README.rst"
-requires-python = ">=3.9"
+readme = "README.md"
+requires-python = ">=3.12"
 license = {file = "LICENSE"}
-keywords = ["pretix"]
+keywords = ["eventyay"]
 authors = [
     {name = "eventyay team", email = "support@eventyay.com"},
 ]
@@ -20,17 +20,12 @@ dependencies = [
 [project.entry-points."pretix.plugin"]
 eventyay_stripe = "eventyay_stripe:PretixPluginMeta"
 
-[project.entry-points."distutils.commands"]
-build = "pretix_plugin_build.build:CustomBuild"
-
 [build-system]
-requires = [
-    "setuptools",
-    "pretix-plugin-build",
-]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
 
 [project.urls]
-homepage = "https://github.com/pretix/pretix-venueless"
+homepage = "https://github.com/fossasia/eventyay-stripe"
 
 [tool.setuptools]
 include-package-data = true

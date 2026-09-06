@@ -1,54 +1,50 @@
-import hashlib
-import hmac
 import json
-import time
+import os
 from datetime import timedelta
 from decimal import Decimal
 from unittest import mock
 
 import pytest
+
+if not os.environ.get("DJANGO_SETTINGS_MODULE"):
+    pytest.skip("Django settings are not configured", allow_module_level=True)
+
 import stripe
 from django.test import RequestFactory
 from django.utils.timezone import now
 from django_scopes import scopes_disabled
+from eventyay.base.models import Event, Order, OrderPayment, OrderRefund, Organizer, Team, User
 
 from eventyay_stripe.models import ReferencedStripeObject
+from eventyay_stripe.utils import stripe_webhook_signature_header
 from eventyay_stripe.views import GlobalSettingsObject, webhook
-from pretix.base.models import (
-    Event, Order, OrderPayment, OrderRefund, Organizer, Team, User,
-)
 
 
 @pytest.fixture
 def env():
-    user = User.objects.create_user('dummy@dummy.dummy', 'dummy')
-    o = Organizer.objects.create(name='Dummy', slug='dummy')
+    user = User.objects.create_user("dummy@dummy.dummy", "dummy")
+    o = Organizer.objects.create(name="Dummy", slug="dummy")
     event = Event.objects.create(
-        organizer=o, name='Dummy', slug='dummy', plugins='eventyay_stripe',
-        date_from=now(), live=True
+        organizer=o, name="Dummy", slug="dummy", plugins="eventyay_stripe", date_from=now(), live=True
     )
     t = Team.objects.create(organizer=event.organizer, can_view_orders=True, can_change_orders=True)
     t.members.add(user)
     t.limit_events.add(event)
     o1 = Order.objects.create(
-        code='FOOBAR', event=event, email='dummy@dummy.test',
+        code="FOOBAR",
+        event=event,
+        email="dummy@dummy.test",
         status=Order.STATUS_PAID,
-        datetime=now(), expires=now() + timedelta(days=10),
-        total=Decimal('13.37'),
+        datetime=now(),
+        expires=now() + timedelta(days=10),
+        total=Decimal("13.37"),
     )
     return event, o1
 
 
 def generate_signature(payload, secret, timestamp=None):
     """Generate a valid Stripe webhook signature for testing."""
-    timestamp = timestamp or int(time.time())
-    signed_payload = f"{timestamp}.{payload}"
-    signature = hmac.new(
-        secret.encode("utf-8"),
-        signed_payload.encode("utf-8"),
-        hashlib.sha256
-    ).hexdigest()
-    return f"t={timestamp},v1={signature}"
+    return stripe_webhook_signature_header(payload, secret, timestamp)
 
 
 def get_test_charge(order: Order):
@@ -81,11 +77,7 @@ def get_test_charge(order: Order):
         "receipt_email": None,
         "receipt_number": None,
         "refunded": False,
-        "refunds": {
-            "object": "list",
-            "data": [],
-            "total_count": 0
-        },
+        "refunds": {"object": "list", "data": [], "total_count": 0},
         "shipping": None,
         "source": {
             "id": "card_18TY5wGGWE2Ias8Td38PjyPy",
@@ -114,7 +106,7 @@ def get_test_charge(order: Order):
         },
         "source_transfer": None,
         "statement_descriptor": None,
-        "status": "succeeded"
+        "status": "succeeded",
     }
 
 
@@ -123,25 +115,29 @@ def test_webhook_all_good(env, client, monkeypatch):
     charge = get_test_charge(env[1])
     monkeypatch.setattr("stripe.Charge.retrieve", lambda *args, **kwargs: charge)
 
-    client.post('/dummy/dummy/stripe/webhook/', json.dumps(
-        {
-            "id": "evt_18otImGGWE2Ias8TUyVRDB1G",
-            "object": "event",
-            "api_version": "2016-03-07",
-            "created": 1472729052,
-            "data": {
-                "object": {
-                    "id": "ch_18TY6GGGWE2Ias8TZHanef25",
-                    "object": "charge",
-                    # Rest of object is ignored anway
-                }
-            },
-            "livemode": True,
-            "pending_webhooks": 1,
-            "request": "req_977XOWC8zk51Z9",
-            "type": "charge.refunded"
-        }
-    ), content_type='application_json')
+    client.post(
+        "/dummy/dummy/stripe/webhook/",
+        json.dumps(
+            {
+                "id": "evt_18otImGGWE2Ias8TUyVRDB1G",
+                "object": "event",
+                "api_version": "2016-03-07",
+                "created": 1472729052,
+                "data": {
+                    "object": {
+                        "id": "ch_18TY6GGGWE2Ias8TZHanef25",
+                        "object": "charge",
+                        # Rest of object is ignored anway
+                    }
+                },
+                "livemode": True,
+                "pending_webhooks": 1,
+                "request": "req_977XOWC8zk51Z9",
+                "type": "charge.refunded",
+            }
+        ),
+        content_type="application_json",
+    )
 
     order = env[1]
     order.refresh_from_db()
@@ -157,7 +153,10 @@ def test_webhook_mark_paid(env, client, monkeypatch):
     charge["amount_refunded"] = 0
     with scopes_disabled():
         payment = env[1].payments.create(
-            provider='stripe', amount=env[1].total, info='{}', state=OrderPayment.PAYMENT_STATE_CREATED,
+            provider="stripe",
+            amount=env[1].total,
+            info="{}",
+            state=OrderPayment.PAYMENT_STATE_CREATED,
         )
         ReferencedStripeObject.objects.create(
             order=order,
@@ -167,31 +166,35 @@ def test_webhook_mark_paid(env, client, monkeypatch):
 
     monkeypatch.setattr("stripe.Charge.retrieve", lambda *args, **kwargs: charge)
 
-    client.post('/dummy/dummy/stripe/webhook/', json.dumps(
-        {
-            "id": "evt_18otImGGWE2Ias8TUyVRDB1G",
-            "object": "event",
-            "api_version": "2016-03-07",
-            "created": 1472729052,
-            "data": {
-                "object": {
-                    "object": "charge",
-                    "id": "pi_1",
-                    "amount": 2000,
-                    "currency": "usd",
-                    "status": "succeeded",
-                    "livemode": True,
-                    "pending_webhooks": 1,
-                    "request": "req_977XOWC8zk51Z9",
-                    "type": "charge.succeeded"
-                }
-            },
-            "livemode": True,
-            "pending_webhooks": 1,
-            "request": "req_977XOWC8zk51Z9",
-            "type": "payment_intent.succeeded"
-        }
-    ), content_type='application_json')
+    client.post(
+        "/dummy/dummy/stripe/webhook/",
+        json.dumps(
+            {
+                "id": "evt_18otImGGWE2Ias8TUyVRDB1G",
+                "object": "event",
+                "api_version": "2016-03-07",
+                "created": 1472729052,
+                "data": {
+                    "object": {
+                        "object": "charge",
+                        "id": "pi_1",
+                        "amount": 2000,
+                        "currency": "usd",
+                        "status": "succeeded",
+                        "livemode": True,
+                        "pending_webhooks": 1,
+                        "request": "req_977XOWC8zk51Z9",
+                        "type": "charge.succeeded",
+                    }
+                },
+                "livemode": True,
+                "pending_webhooks": 1,
+                "request": "req_977XOWC8zk51Z9",
+                "type": "payment_intent.succeeded",
+            }
+        ),
+        content_type="application_json",
+    )
 
     order.refresh_from_db()
     assert order.status == Order.STATUS_PENDING
@@ -202,13 +205,10 @@ def test_webhook_partial_refund(env, client, monkeypatch):
     charge = get_test_charge(env[1])
 
     with scopes_disabled():
-        payment = env[1].payments.create(
-            provider='stripe', amount=env[1].total, info=json.dumps(charge)
-        )
-    ReferencedStripeObject.objects.create(order=env[1], reference="ch_18TY6GGGWE2Ias8TZHanef25",
-                                          payment=payment)
+        payment = env[1].payments.create(provider="stripe", amount=env[1].total, info=json.dumps(charge))
+    ReferencedStripeObject.objects.create(order=env[1], reference="ch_18TY6GGGWE2Ias8TZHanef25", payment=payment)
 
-    charge['refunds'] = {
+    charge["refunds"] = {
         "object": "list",
         "data": [
             {
@@ -222,10 +222,10 @@ def test_webhook_partial_refund(env, client, monkeypatch):
                 "metadata": {},
                 "reason": None,
                 "receipt_number": None,
-                "status": "succeeded"
+                "status": "succeeded",
             }
         ],
-        "total_count": 1
+        "total_count": 1,
     }
     monkeypatch.setattr("stripe.Charge.retrieve", lambda *args, **kwargs: charge)
 
@@ -245,20 +245,17 @@ def test_webhook_partial_refund(env, client, monkeypatch):
             "livemode": True,
             "pending_webhooks": 1,
             "request": "req_977XOWC8zk51Z9",
-            "type": "charge.refunded"
+            "type": "charge.refunded",
         }
     )
 
     gs = GlobalSettingsObject()
-    gs.settings.set('payment_stripe_webhook_secret', 'whsec_123')
-    gs.settings.set('payment_stripe_connect_test_secret_key', 'sk_test_123')
+    gs.settings.set("payment_stripe_webhook_secret", "whsec_123")
+    gs.settings.set("payment_stripe_connect_test_secret_key", "sk_test_123")
 
     sig_header = generate_signature(payload, "whsec_123")
     client.post(
-        '/dummy/dummy/stripe/webhook/',
-        payload,
-        content_type='application_json',
-        HTTP_STRIPE_SIGNATURE=sig_header
+        "/dummy/dummy/stripe/webhook/", payload, content_type="application_json", HTTP_STRIPE_SIGNATURE=sig_header
     )
 
     order = env[1]
@@ -268,8 +265,8 @@ def test_webhook_partial_refund(env, client, monkeypatch):
     with scopes_disabled():
         ra = order.refunds.first()
     assert ra.state == OrderRefund.REFUND_STATE_EXTERNAL
-    assert ra.source == 'external'
-    assert ra.amount == Decimal('123.00')
+    assert ra.source == "external"
+    assert ra.amount == Decimal("123.00")
 
 
 @pytest.mark.django_db
@@ -284,12 +281,10 @@ def test_webhook_global(env, client, monkeypatch):
 
     with scopes_disabled():
         payment = order.payments.create(
-            provider='stripe', amount=order.total, info=json.dumps(charge), state=OrderPayment.PAYMENT_STATE_CREATED
+            provider="stripe", amount=order.total, info=json.dumps(charge), state=OrderPayment.PAYMENT_STATE_CREATED
         )
-    ReferencedStripeObject.objects.create(order=order, reference="ch_18TY6GGGWE2Ias8TZHanef25",
-                                          payment=payment)
-    ReferencedStripeObject.objects.create(order=order, reference="pi_123456",
-                                          payment=payment)
+    ReferencedStripeObject.objects.create(order=order, reference="ch_18TY6GGGWE2Ias8TZHanef25", payment=payment)
+    ReferencedStripeObject.objects.create(order=order, reference="pi_123456", payment=payment)
 
     payload = json.dumps(
         {
@@ -304,25 +299,22 @@ def test_webhook_global(env, client, monkeypatch):
                     "payment_intent": "pi_123456",
                     "metadata": {
                         "event": order.event_id,
-                    }
+                    },
                 }
             },
             "livemode": True,
             "pending_webhooks": 1,
             "request": "req_977XOWC8zk51Z9",
-            "type": "payment_intent.succeeded"
+            "type": "payment_intent.succeeded",
         }
     )
     gs = GlobalSettingsObject()
-    gs.settings.set('payment_stripe_webhook_secret', 'whsec_123')
-    gs.settings.set('payment_stripe_connect_test_secret_key', 'sk_test_123')
+    gs.settings.set("payment_stripe_webhook_secret", "whsec_123")
+    gs.settings.set("payment_stripe_connect_test_secret_key", "sk_test_123")
 
     sig_header = generate_signature(payload, "whsec_123")
     response = client.post(
-        '/_stripe/webhook/',
-        payload,
-        content_type='application_json',
-        HTTP_STRIPE_SIGNATURE=sig_header
+        "/_stripe/webhook/", payload, content_type="application_json", HTTP_STRIPE_SIGNATURE=sig_header
     )
     assert response.status_code == 200
 
@@ -342,7 +334,7 @@ def test_webhook_global_legacy_reference(env, client, monkeypatch):
 
     with scopes_disabled():
         payment = order.payments.create(
-            provider='stripe', amount=order.total, info=json.dumps(charge), state=OrderPayment.PAYMENT_STATE_CREATED
+            provider="stripe", amount=order.total, info=json.dumps(charge), state=OrderPayment.PAYMENT_STATE_CREATED
         )
     ReferencedStripeObject.objects.create(order=order, reference="ch_18TY6GGGWE2Ias8TZHanef25")
     ReferencedStripeObject.objects.create(order=order, reference="pi_123456")
@@ -360,21 +352,23 @@ def test_webhook_global_legacy_reference(env, client, monkeypatch):
                     "payment_intent": "pi_123456",
                     "metadata": {
                         "event": order.event_id,
-                    }
+                    },
                 }
             },
             "livemode": True,
             "pending_webhooks": 1,
             "request": "req_977XOWC8zk51Z9",
-            "type": "payment_intent.succeeded"
+            "type": "payment_intent.succeeded",
         }
     )
     gs = GlobalSettingsObject()
-    gs.settings.set('payment_stripe_webhook_secret', 'whsec_123')
-    gs.settings.set('payment_stripe_connect_test_secret_key', 'sk_test_123')
+    gs.settings.set("payment_stripe_webhook_secret", "whsec_123")
+    gs.settings.set("payment_stripe_connect_test_secret_key", "sk_test_123")
     sig_header = generate_signature(payload, "whsec_123")
 
-    response = client.post('/_stripe/webhook/', payload, content_type='application_json', HTTP_STRIPE_SIGNATURE=sig_header)
+    response = client.post(
+        "/_stripe/webhook/", payload, content_type="application_json", HTTP_STRIPE_SIGNATURE=sig_header
+    )
     assert response.status_code == 200
 
     order.refresh_from_db()
@@ -390,41 +384,43 @@ def factory():
 
 @pytest.fixture
 def mock_global_settings():
-    with mock.patch('eventyay_stripe.views.GlobalSettingsObject') as MockGlobalSettings:
+    with mock.patch("eventyay_stripe.views.GlobalSettingsObject") as MockGlobalSettings:
         instance = MockGlobalSettings.return_value
-        instance.settings.payment_stripe_connect_secret_key = 'sk_test_123'
-        instance.settings.payment_stripe_connect_test_secret_key = 'sk_test_123'
-        instance.settings.payment_stripe_webhook_secret = 'whsec_123'
+        instance.settings.payment_stripe_connect_secret_key = "sk_test_123"
+        instance.settings.payment_stripe_connect_test_secret_key = "sk_test_123"
+        instance.settings.payment_stripe_webhook_secret = "whsec_123"
         yield instance
 
 
 @pytest.fixture
 def valid_payload():
-    return json.dumps({
-        "id": "evt_1",
-        "object": "event",
-        "type": "payment_intent.succeeded",
-        "data": {
-            "object": {
-                "object": "charge",
-                "id": "pi_1",
-                "amount": 2000,
-                "currency": "usd",
-                "status": "succeeded",
-                "livemode": True,
-                "pending_webhooks": 1,
-                "request": "req_977XOWC8zk51Z9",
-                "type": "charge.succeeded"
-            }
+    return json.dumps(
+        {
+            "id": "evt_1",
+            "object": "event",
+            "type": "payment_intent.succeeded",
+            "data": {
+                "object": {
+                    "object": "charge",
+                    "id": "pi_1",
+                    "amount": 2000,
+                    "currency": "usd",
+                    "status": "succeeded",
+                    "livemode": True,
+                    "pending_webhooks": 1,
+                    "request": "req_977XOWC8zk51Z9",
+                    "type": "charge.succeeded",
+                }
+            },
         }
-    })
+    )
 
 
 @pytest.mark.django_db
 def test_webhook_invalid_payload(factory, mock_global_settings):
     invalid_payload = "invalid_payload"
-    request = factory.post('/dummy/dummy/stripe/webhook', data=invalid_payload, content_type='application/json')
-    with mock.patch('stripe.Webhook.construct_event', side_effect=ValueError("Invalid JSON")):
+    request = factory.post("/dummy/dummy/stripe/webhook", data=invalid_payload, content_type="application/json")
+    with mock.patch("stripe.Webhook.construct_event", side_effect=ValueError("Invalid JSON")):
         response = webhook(request)
         assert response.status_code == 400
         assert response.content == b"Invalid payload"
@@ -432,10 +428,13 @@ def test_webhook_invalid_payload(factory, mock_global_settings):
 
 @pytest.mark.django_db
 def test_webhook_invalid_signature(factory, valid_payload, mock_global_settings):
-    request = factory.post('/_stripe/webhook', data=valid_payload, content_type='application/json')
-    request.META['HTTP_STRIPE_SIGNATURE'] = 'invalid_signature'
+    request = factory.post("/_stripe/webhook", data=valid_payload, content_type="application/json")
+    request.META["HTTP_STRIPE_SIGNATURE"] = "invalid_signature"
 
-    with mock.patch('stripe.Webhook.construct_event', side_effect=stripe.error.SignatureVerificationError("Invalid signature", 'sig_123')):
+    with mock.patch(
+        "stripe.Webhook.construct_event",
+        side_effect=stripe.error.SignatureVerificationError("Invalid signature", "sig_123"),
+    ):
         response = webhook(request)
         assert response.status_code == 400
         assert response.content == b"Invalid Stripe signature"
@@ -443,19 +442,19 @@ def test_webhook_invalid_signature(factory, valid_payload, mock_global_settings)
 
 @pytest.mark.django_db
 def test_webhook_success(factory, valid_payload, mock_global_settings):
-    request = factory.post('/_stripe/webhook', data=valid_payload, content_type='application/json')
-    request.META['HTTP_STRIPE_SIGNATURE'] = 'valid_signature'
+    request = factory.post("/_stripe/webhook", data=valid_payload, content_type="application/json")
+    request.META["HTTP_STRIPE_SIGNATURE"] = "valid_signature"
 
-    with mock.patch('stripe.Webhook.construct_event', return_value={"type": "payment_intent.succeeded"}):
+    with mock.patch("stripe.Webhook.construct_event", return_value={"type": "payment_intent.succeeded"}):
         response = webhook(request)
         assert response.status_code == 200
 
 
 @pytest.mark.django_db
 def test_webhook_refund(factory, valid_payload, mock_global_settings):
-    request = factory.post('/_stripe/webhook', data=valid_payload, content_type='application/json')
-    request.META['HTTP_STRIPE_SIGNATURE'] = 'valid_signature'
+    request = factory.post("/_stripe/webhook", data=valid_payload, content_type="application/json")
+    request.META["HTTP_STRIPE_SIGNATURE"] = "valid_signature"
 
-    with mock.patch('stripe.Webhook.construct_event', return_value={"type": "payment_intent.succeeded"}):
+    with mock.patch("stripe.Webhook.construct_event", return_value={"type": "payment_intent.succeeded"}):
         response = webhook(request)
         assert response.status_code == 200

@@ -24,17 +24,17 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Sync project lockfile
-        run: uv sync --locked
+      - name: Verify lockfile
+        run: uv lock --check
 
-      - name: Install build tooling
-        run: uv pip install build twine
+      - name: Sync project
+        run: uv sync --locked
 
       - name: Build package
         run: |
           uv build
           ls -l dist
-          uv run twine check dist/*
+          uvx twine check dist/*
 
       - name: Upload dist artifacts
         uses: actions/upload-artifact@v7

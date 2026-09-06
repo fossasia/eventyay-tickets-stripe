@@ -1,7 +1,6 @@
 import stripe
 from django.core.management.base import BaseCommand
 from django_scopes import scopes_disabled
-
 from eventyay.base.models import Event
 from eventyay.base.settings import GlobalSettingsObject
 
@@ -25,11 +24,8 @@ class Command(BaseCommand):
                     e.settings.payment_stripe_merchant_country = cache[uid]
                 else:
                     try:
-                        account = stripe.Account.retrieve(
-                            uid,
-                            api_key=api_key
-                        )
+                        account = stripe.Account.retrieve(uid, api_key=api_key)
                     except Exception as e:
                         print(e)
                     else:
-                        e.settings.payment_stripe_merchant_country = cache[uid] = account.get('country')
+                        e.settings.payment_stripe_merchant_country = cache[uid] = account.get("country")

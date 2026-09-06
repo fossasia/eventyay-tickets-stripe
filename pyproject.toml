@@ -3,9 +3,9 @@ name = "eventyay-stripe"
 dynamic = ["version"]
 description = "Integrates eventyay-stripe with eventyay"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12, <3.13"
 license = {file = "LICENSE"}
-keywords = ["eventyay"]
+keywords = ["Eventyay"]
 authors = [
     {name = "eventyay team", email = "support@eventyay.com"},
 ]
@@ -21,6 +21,8 @@ dependencies = [
 [project.optional-dependencies]
 test = [
     "pytest>=9.1.1",
+    "pytest-django>=4.14.0",
+    "pytest-env>=1.7.0",
     "pytest-rerunfailures>=16.6",
 ]
 
@@ -49,6 +51,32 @@ version = {attr = "eventyay_stripe.__version__"}
 include = ["eventyay*"]
 namespaces = false
 
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = ["**/migrations"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["E501", "UP031"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/migrations/*.py" = ["E501"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+DJANGO_SETTINGS_MODULE = "eventyay.config.settings"
+testpaths = ["tests", "eventyay_stripe/tests"]
 pythonpath = ["."]
+
+[tool.pytest_env]
+EVY_RUNNING_ENVIRONMENT = "testing"
+EVY_POSTGRES_HOST = "localhost"
+EVY_POSTGRES_PORT = "5432"
+EVY_POSTGRES_USER = "postgres"
+EVY_POSTGRES_PASSWORD = "postgres"
+EVY_POSTGRES_DB = "eventyay-db"

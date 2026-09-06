@@ -44,7 +44,7 @@ jobs:
 
       - name: Clone eventyay
         run: |
-          git clone --depth 1 https://github.com/fossasia/eventyay.git ../eventyay
+          git clone --depth 1 --branch dev https://github.com/fossasia/eventyay.git ../eventyay
 
       - name: Set up Python
         uses: actions/setup-python@v7
@@ -63,7 +63,7 @@ jobs:
         run: |
           cd ../eventyay/app
           uv sync --all-extras --all-groups
-          uv pip install -e ../../eventyay-stripe
+          uv pip install -e "../../$(basename "$GITHUB_WORKSPACE")"
 
       - name: Compile translations
         run: |
@@ -78,6 +78,8 @@ jobs:
           EVY_POSTGRES_USER: postgres
           EVY_POSTGRES_PASSWORD: postgres
           EVY_POSTGRES_DB: eventyay-db
+          DJANGO_SETTINGS_MODULE: eventyay.config.settings
+          PYTHONPATH: ${{ github.workspace }}/../eventyay/app
         run: |
           . ../eventyay/app/.venv/bin/activate
-          pytest tests --reruns 3
+          pytest --reruns 3

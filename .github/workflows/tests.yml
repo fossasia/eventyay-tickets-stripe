@@ -10,6 +10,9 @@ on:
     paths-ignore:
       - "eventyay_stripe/locale/**"
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -41,6 +44,8 @@ jobs:
     steps:
       - name: Checkout eventyay-stripe plugin
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Clone eventyay
         run: |

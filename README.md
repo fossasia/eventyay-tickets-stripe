@@ -109,13 +109,13 @@ From the ``eventyay-stripe`` directory, install the plugin in editable mode.
 
 .. code-block:: bash
 
-   pip install -e .
+   pip install -e ".[dev]"
 
 If your Eventyay development setup uses ``uv``, you can also use:
 
 .. code-block:: bash
 
-   uv pip install -e .
+   uv pip install -e ".[dev]"
 
 5. Apply migrations
 ~~~~~~~~~~~~~~~~~~~
@@ -264,7 +264,16 @@ Install the plugin in editable mode:
 
 .. code-block:: bash
 
-   pip install -e .
+   pip install -e ".[dev]"
+
+Lint and format Python with Ruff:
+
+.. code-block:: bash
+
+   ruff check .
+   ruff check . --fix
+   ruff format --check .
+   ruff format .
 
 Compile translations:
 
@@ -309,7 +318,6 @@ Important files and directories:
    │   └── migrations/        Database migrations
    ├── pyproject.toml         Python package metadata
    ├── setup.py               Setuptools entry point
-   ├── setup.cfg              Tool configuration
    ├── MANIFEST.in            Package data inclusion
    ├── Makefile               Translation helper commands
    ├── pytest.ini             Pytest configuration

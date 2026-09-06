@@ -1,62 +1,60 @@
-from typing import Optional, Union
-
 from pydantic import BaseModel, model_validator
 
 
 class CardDetails(BaseModel):
-    brand: Optional[str] = None
-    last4: Optional[str] = None
-    exp_month: Optional[int] = None
-    exp_year: Optional[int] = None
+    brand: str | None = None
+    last4: str | None = None
+    exp_month: int | None = None
+    exp_year: int | None = None
 
 
 class IdealDetails(BaseModel):
-    bank: Optional[str] = None
+    bank: str | None = None
 
 
 class BancontactDetails(BaseModel):
-    bankname: Optional[str] = None
+    bankname: str | None = None
 
 
 class SofortDetails(BaseModel):
-    country: Optional[str] = None
-    iban_last4: Optional[str] = None
-    bank_name: Optional[str] = None
+    country: str | None = None
+    iban_last4: str | None = None
+    bank_name: str | None = None
 
 
 class EPSDetails(BaseModel):
-    bank: Optional[str] = None
+    bank: str | None = None
 
 
 class P24Details(BaseModel):
-    bank: Optional[str] = None
+    bank: str | None = None
 
 
 class PaymentMethodDetails(BaseModel):
-    card: Optional[CardDetails] = None
-    ideal: Optional[IdealDetails] = None
-    bancontact: Optional[BancontactDetails] = None
-    sofort: Optional[SofortDetails] = None
-    eps: Optional[EPSDetails] = None
-    p24: Optional[P24Details] = None
+    card: CardDetails | None = None
+    ideal: IdealDetails | None = None
+    bancontact: BancontactDetails | None = None
+    sofort: SofortDetails | None = None
+    eps: EPSDetails | None = None
+    p24: P24Details | None = None
 
 
 class LatestCharge(BaseModel):
-    payment_method_details: Optional[PaymentMethodDetails] = None
+    payment_method_details: PaymentMethodDetails | None = None
 
 
 class Source(BaseModel):
-    card: Optional[CardDetails] = None
-    ideal: Optional[IdealDetails] = None
-    bancontact: Optional[BancontactDetails] = None
-    sofort: Optional[SofortDetails] = None
-    eps: Optional[EPSDetails] = None
-    p24: Optional[P24Details] = None
+    card: CardDetails | None = None
+    ideal: IdealDetails | None = None
+    bancontact: BancontactDetails | None = None
+    sofort: SofortDetails | None = None
+    eps: EPSDetails | None = None
+    p24: P24Details | None = None
 
 
 class PaymentInfoData(BaseModel):
-    latest_charge: Optional[Union[str, LatestCharge]] = None
-    source: Optional[Source] = None
+    latest_charge: str | LatestCharge | None = None
+    source: Source | None = None
 
     @model_validator(mode="before")
     def check_latest_charge_or_source(cls, values):

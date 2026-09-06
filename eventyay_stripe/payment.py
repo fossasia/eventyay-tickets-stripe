@@ -553,6 +553,9 @@ class PaymentIntentFactory:
                 }
         except Exception as e:
             logger.warning("Could not set shipping information for payment intent: %s", str(e))
+            raise PaymentException(
+                _("Could not extract shipping information from the order. This is required for payment compliance.")
+            )
         base_params.update(kwargs)
         return stripe.PaymentIntent.create(**base_params)
 

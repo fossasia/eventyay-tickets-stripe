@@ -3,7 +3,6 @@ from urllib.parse import urlsplit
 
 import stripe
 from django.conf import settings
-
 from eventyay.base.services.tasks import EventTask
 from eventyay.celery_app import app
 from eventyay.multidomain.urlreverse import get_event_domain
@@ -36,13 +35,13 @@ def stripe_verify_domain(event, domain):
     account = get_stripe_account_key(prov)
 
     api_config = {
-        'api_key': prov.settings.connect_secret_key or prov.settings.connect_test_secret_key
+        "api_key": prov.settings.connect_secret_key or prov.settings.connect_test_secret_key
         if prov.settings.connect_client_id and prov.settings.connect_user_id
         else prov.settings.secret_key
     }
 
     if prov.settings.connect_client_id and prov.settings.connect_user_id:
-        api_config['stripe_account'] = prov.settings.connect_user_id
+        api_config["stripe_account"] = prov.settings.connect_user_id
 
     if RegisteredApplePayDomain.objects.filter(account=account, domain=domain).exists():
         return
@@ -50,7 +49,7 @@ def stripe_verify_domain(event, domain):
     try:
         resp = stripe.ApplePayDomain.create(domain_name=domain, **api_config)
     except stripe.error.StripeError:
-        logger.exception('Could not verify domain with Stripe')
+        logger.exception("Could not verify domain with Stripe")
     else:
         if resp.livemode:
             RegisteredApplePayDomain.objects.create(domain=domain, account=account)

@@ -7,27 +7,27 @@ import stripe
 from django.test import RequestFactory
 from django.utils.timezone import now
 from django_scopes import scope
+from eventyay.base.models import Event, Order, OrderRefund, Organizer
+from eventyay.base.payment import PaymentException
 from stripe.error import APIConnectionError, CardError
 
 from eventyay_stripe import __version__
 from eventyay_stripe.payment import StripeCreditCard
-from eventyay.base.models import Event, Order, OrderRefund, Organizer
-from eventyay.base.payment import PaymentException
 
 
 @pytest.fixture
 def env():
-    o = Organizer.objects.create(name='Dummy', slug='dummy')
+    o = Organizer.objects.create(name="Dummy", slug="dummy")
     with scope(organizer=o):
-        event = Event.objects.create(
-            organizer=o, name='Mega Conf', slug='dummy',
-            date_from=now(), live=True
-        )
+        event = Event.objects.create(organizer=o, name="Mega Conf", slug="dummy", date_from=now(), live=True)
         o1 = Order.objects.create(
-            code='FOOBAR', event=event, email='dummy@dummy.test',
+            code="FOOBAR",
+            event=event,
+            email="dummy@dummy.test",
             status=Order.STATUS_PENDING,
-            datetime=now(), expires=now() + timedelta(days=10),
-            total=Decimal('13.37')
+            datetime=now(),
+            expires=now() + timedelta(days=10),
+            total=Decimal("13.37"),
         )
         yield event, o1
 
@@ -43,27 +43,27 @@ def factory():
     return RequestFactory()
 
 
-class MockedRefunds():
+class MockedRefunds:
     pass
 
 
-class MockedCharge():
-    status = ''
+class MockedCharge:
+    status = ""
     paid = False
-    id = 'ch_123345345'
+    id = "ch_123345345"
     refunds = MockedRefunds()
 
     def refresh(self):
         pass
 
 
-class Object():
+class Object:
     pass
 
 
-class MockedPaymentintent():
-    status = ''
-    id = 'pi_1EUon12Tb35ankTnZyvC3SdE'
+class MockedPaymentintent:
+    status = ""
+    id = "pi_1EUon12Tb35ankTnZyvC3SdE"
     charges = Object()
     charges.data = [MockedCharge()]
     last_payment_error = None
@@ -74,13 +74,13 @@ def test_perform_success(env, factory, monkeypatch):
     event, order = env
 
     def paymentintent_create(**kwargs):
-        assert kwargs['amount'] == 1337
-        assert kwargs['currency'] == 'eur'
-        assert kwargs['payment_method'] == 'pm_189fTT2eZvKYlo2CvJKzEzeu'
-        assert kwargs['description'] == 'DUMMY-FOOBAR'
-        assert kwargs['statement_descriptor_suffix'] == 'DUMMY-FOOBAR Mega Conf'
+        assert kwargs["amount"] == 1337
+        assert kwargs["currency"] == "eur"
+        assert kwargs["payment_method"] == "pm_189fTT2eZvKYlo2CvJKzEzeu"
+        assert kwargs["description"] == "DUMMY-FOOBAR"
+        assert kwargs["statement_descriptor_suffix"] == "DUMMY-FOOBAR Mega Conf"
         c = MockedPaymentintent()
-        c.status = 'succeeded'
+        c.status = "succeeded"
         c.charges.data[0].paid = True
         return c
 
@@ -91,23 +91,19 @@ def test_perform_success(env, factory, monkeypatch):
     # Verify Stripe API version and app info configuration
     assert stripe.api_version == "2024-11-20.acacia"
     assert stripe.app_info == {
-        'name': 'eventyay-stripe',
-        'version': __version__,
-        'url': 'https://github.com/fossasia/eventyay-stripe',
-        'partner_id': None
+        "name": "eventyay-stripe",
+        "version": __version__,
+        "url": "https://github.com/fossasia/eventyay-stripe",
+        "partner_id": None,
     }
 
-    req = factory.post('/', {
-        'stripe_payment_method_id': 'pm_189fTT2eZvKYlo2CvJKzEzeu',
-        'stripe_last4': '4242',
-        'stripe_brand': 'Visa'
-    })
+    req = factory.post(
+        "/", {"stripe_payment_method_id": "pm_189fTT2eZvKYlo2CvJKzEzeu", "stripe_last4": "4242", "stripe_brand": "Visa"}
+    )
     req.session = {}
     prov.checkout_prepare(req, {})
-    assert 'payment_stripe_card_payment_method_id' in req.session
-    payment = order.payments.create(
-        provider='stripe_cc', amount=order.total
-    )
+    assert "payment_stripe_card_payment_method_id" in req.session
+    payment = order.payments.create(provider="stripe_cc", amount=order.total)
     prov.execute_payment(req, payment)
     order.refresh_from_db()
     assert order.status == Order.STATUS_PAID
@@ -116,16 +112,16 @@ def test_perform_success(env, factory, monkeypatch):
 @pytest.mark.django_db
 def test_statement_descriptor_uses_sanitized_event_name(env):
     event, order = env
-    payment = order.payments.create(provider='stripe_cc', amount=order.total)
+    payment = order.payments.create(provider="stripe_cc", amount=order.total)
     prov = StripeCreditCard(event)
 
-    assert prov.statement_descriptor(payment) == 'DUMMY-FOOBAR Mega Conf'
+    assert prov.statement_descriptor(payment) == "DUMMY-FOOBAR Mega Conf"
 
 
 @pytest.mark.django_db
 def test_payment_intent_description_uses_raw_event_name(env, monkeypatch):
     event, order = env
-    payment = order.payments.create(provider='stripe_cc', amount=order.total)
+    payment = order.payments.create(provider="stripe_cc", amount=order.total)
     prov = StripeCreditCard(event)
     captured = {}
 
@@ -138,47 +134,43 @@ def test_payment_intent_description_uses_raw_event_name(env, monkeypatch):
     prov.intent_factory.create_payment_intent(
         payment=payment,
         event=event,
-        payment_method_id='pm_test',
-        method='card',
-        confirmation_method='manual',
-        idempotency_key_seed='seed',
+        payment_method_id="pm_test",
+        method="card",
+        confirmation_method="manual",
+        idempotency_key_seed="seed",
         kwargs={
-            'statement_descriptor_suffix': prov.statement_descriptor(payment),
+            "statement_descriptor_suffix": prov.statement_descriptor(payment),
         },
     )
 
-    assert captured['description'] == 'DUMMY-FOOBAR'
-    assert captured['statement_descriptor_suffix'] == 'DUMMY-FOOBAR Mega Conf'
+    assert captured["description"] == "DUMMY-FOOBAR"
+    assert captured["statement_descriptor_suffix"] == "DUMMY-FOOBAR Mega Conf"
 
 
 @pytest.mark.django_db
 def test_perform_success_zero_decimal_currency(env, factory, monkeypatch):
     event, order = env
-    event.currency = 'JPY'
+    event.currency = "JPY"
     event.save()
 
     def paymentintent_create(**kwargs):
-        assert kwargs['amount'] == 13
-        assert kwargs['currency'] == 'jpy'
-        assert kwargs['payment_method'] == 'pm_189fTT2eZvKYlo2CvJKzEzeu'
+        assert kwargs["amount"] == 13
+        assert kwargs["currency"] == "jpy"
+        assert kwargs["payment_method"] == "pm_189fTT2eZvKYlo2CvJKzEzeu"
         c = MockedPaymentintent()
-        c.status = 'succeeded'
+        c.status = "succeeded"
         c.charges.data[0].paid = True
         return c
 
     monkeypatch.setattr("stripe.PaymentIntent.create", paymentintent_create)
     prov = StripeCreditCard(event)
-    req = factory.post('/', {
-        'stripe_payment_method_id': 'pm_189fTT2eZvKYlo2CvJKzEzeu',
-        'stripe_last4': '4242',
-        'stripe_brand': 'Visa'
-    })
+    req = factory.post(
+        "/", {"stripe_payment_method_id": "pm_189fTT2eZvKYlo2CvJKzEzeu", "stripe_last4": "4242", "stripe_brand": "Visa"}
+    )
     req.session = {}
     prov.checkout_prepare(req, {})
-    assert 'payment_stripe_card_payment_method_id' in req.session
-    payment = order.payments.create(
-        provider='stripe_cc', amount=order.total
-    )
+    assert "payment_stripe_card_payment_method_id" in req.session
+    payment = order.payments.create(provider="stripe_cc", amount=order.total)
     prov.execute_payment(req, payment)
     order.refresh_from_db()
     assert order.status == Order.STATUS_PAID
@@ -189,22 +181,18 @@ def test_perform_card_error(env, factory, monkeypatch):
     event, order = env
 
     def paymentintent_create(**kwargs):
-        raise CardError(message='Foo', param='foo', code=100)
+        raise CardError(message="Foo", param="foo", code=100)
 
     monkeypatch.setattr("stripe.PaymentIntent.create", paymentintent_create)
     prov = StripeCreditCard(event)
-    req = factory.post('/', {
-        'stripe_payment_method_id': 'pm_189fTT2eZvKYlo2CvJKzEzeu',
-        'stripe_last4': '4242',
-        'stripe_brand': 'Visa'
-    })
+    req = factory.post(
+        "/", {"stripe_payment_method_id": "pm_189fTT2eZvKYlo2CvJKzEzeu", "stripe_last4": "4242", "stripe_brand": "Visa"}
+    )
     req.session = {}
     prov.checkout_prepare(req, {})
-    assert 'payment_stripe_card_payment_method_id' in req.session
+    assert "payment_stripe_card_payment_method_id" in req.session
     with pytest.raises(PaymentException):
-        payment = order.payments.create(
-            provider='stripe_cc', amount=order.total
-        )
+        payment = order.payments.create(provider="stripe_cc", amount=order.total)
         prov.execute_payment(req, payment)
     order.refresh_from_db()
     assert order.status == Order.STATUS_PENDING
@@ -215,22 +203,18 @@ def test_perform_stripe_error(env, factory, monkeypatch):
     event, order = env
 
     def paymentintent_create(**kwargs):
-        raise CardError(message='Foo', param='foo', code=100)
+        raise CardError(message="Foo", param="foo", code=100)
 
     monkeypatch.setattr("stripe.PaymentIntent.create", paymentintent_create)
     prov = StripeCreditCard(event)
-    req = factory.post('/', {
-        'stripe_payment_method_id': 'pm_189fTT2eZvKYlo2CvJKzEzeu',
-        'stripe_last4': '4242',
-        'stripe_brand': 'Visa'
-    })
+    req = factory.post(
+        "/", {"stripe_payment_method_id": "pm_189fTT2eZvKYlo2CvJKzEzeu", "stripe_last4": "4242", "stripe_brand": "Visa"}
+    )
     req.session = {}
     prov.checkout_prepare(req, {})
-    assert 'payment_stripe_card_payment_method_id' in req.session
+    assert "payment_stripe_card_payment_method_id" in req.session
     with pytest.raises(PaymentException):
-        payment = order.payments.create(
-            provider='stripe_cc', amount=order.total
-        )
+        payment = order.payments.create(provider="stripe_cc", amount=order.total)
         prov.execute_payment(req, payment)
     order.refresh_from_db()
     assert order.status == Order.STATUS_PENDING
@@ -241,12 +225,12 @@ def test_perform_failed(env, factory, monkeypatch):
     event, order = env
 
     def paymentintent_create(**kwargs):
-        assert kwargs['amount'] == 1337
-        assert kwargs['currency'] == 'eur'
-        assert kwargs['payment_method'] == 'pm_189fTT2eZvKYlo2CvJKzEzeu'
+        assert kwargs["amount"] == 1337
+        assert kwargs["currency"] == "eur"
+        assert kwargs["payment_method"] == "pm_189fTT2eZvKYlo2CvJKzEzeu"
         c = MockedPaymentintent()
-        c.status = 'failed'
-        c.failure_message = 'Foo'
+        c.status = "failed"
+        c.failure_message = "Foo"
         c.charges.data[0].paid = True
         c.last_payment_error = Object()
         c.last_payment_error.message = "Foo"
@@ -254,18 +238,14 @@ def test_perform_failed(env, factory, monkeypatch):
 
     monkeypatch.setattr("stripe.PaymentIntent.create", paymentintent_create)
     prov = StripeCreditCard(event)
-    req = factory.post('/', {
-        'stripe_payment_method_id': 'pm_189fTT2eZvKYlo2CvJKzEzeu',
-        'stripe_last4': '4242',
-        'stripe_brand': 'Visa'
-    })
+    req = factory.post(
+        "/", {"stripe_payment_method_id": "pm_189fTT2eZvKYlo2CvJKzEzeu", "stripe_last4": "4242", "stripe_brand": "Visa"}
+    )
     req.session = {}
     prov.checkout_prepare(req, {})
-    assert 'payment_stripe_card_payment_method_id' in req.session
+    assert "payment_stripe_card_payment_method_id" in req.session
     with pytest.raises(PaymentException):
-        payment = order.payments.create(
-            provider='stripe_cc', amount=order.total
-        )
+        payment = order.payments.create(provider="stripe_cc", amount=order.total)
         prov.execute_payment(req, payment)
     order.refresh_from_db()
     assert order.status == Order.STATUS_PENDING
@@ -278,8 +258,8 @@ def test_refund_success(env, factory, monkeypatch):
     def charge_retr(*args, **kwargs):
         def refund_create(amount):
             r = MockedCharge()
-            r.id = 'foo'
-            r.status = 'succeeded'
+            r.id = "foo"
+            r.status = "succeeded"
             return r
 
         c = MockedCharge()
@@ -288,13 +268,13 @@ def test_refund_success(env, factory, monkeypatch):
 
     monkeypatch.setattr("stripe.Charge.retrieve", charge_retr)
     order.status = Order.STATUS_PAID
-    p = order.payments.create(provider='stripe_cc', amount=order.total, info=json.dumps({
-        'id': 'ch_123345345'
-    }))
+    p = order.payments.create(provider="stripe_cc", amount=order.total, info=json.dumps({"id": "ch_123345345"}))
     order.save()
     prov = StripeCreditCard(event)
     refund = order.refunds.create(
-        provider='stripe_cc', amount=order.total, payment=p,
+        provider="stripe_cc",
+        amount=order.total,
+        payment=p,
     )
     prov.execute_refund(refund)
     refund.refresh_from_db()
@@ -307,7 +287,7 @@ def test_refund_unavailable(env, factory, monkeypatch):
 
     def charge_retr(*args, **kwargs):
         def refund_create(amount):
-            raise APIConnectionError(message='Foo')
+            raise APIConnectionError(message="Foo")
 
         c = MockedCharge()
         c.refunds.create = refund_create
@@ -315,14 +295,10 @@ def test_refund_unavailable(env, factory, monkeypatch):
 
     monkeypatch.setattr("stripe.Charge.retrieve", charge_retr)
     order.status = Order.STATUS_PAID
-    p = order.payments.create(provider='stripe_cc', amount=order.total, info=json.dumps({
-        'id': 'ch_123345345'
-    }))
+    p = order.payments.create(provider="stripe_cc", amount=order.total, info=json.dumps({"id": "ch_123345345"}))
     order.save()
     prov = StripeCreditCard(event)
-    refund = order.refunds.create(
-        provider='stripe_cc', amount=order.total, payment=p
-    )
+    refund = order.refunds.create(provider="stripe_cc", amount=order.total, payment=p)
     with pytest.raises(PaymentException):
         prov.execute_refund(refund)
     refund.refresh_from_db()

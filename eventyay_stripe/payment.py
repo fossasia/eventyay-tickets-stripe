@@ -57,7 +57,6 @@ def _uses_stripe_connect(event_settings) -> bool:
     return bool(
         event_settings.connect_client_id
         and event_settings.connect_user_id
-        and not event_settings.secret_key
     )
 
 
@@ -131,42 +130,57 @@ class StripeSettingsHolder(BasePaymentProvider):
         return authorize_url
 
     def settings_content_render(self, request):
-        if self.settings.connect_client_id and not self.settings.secret_key:
-            # Use Stripe connect
-            if not self.settings.connect_user_id:
-                return (
-                    "<p>{}</p>" "<a href='{}' class='btn btn-primary btn-lg'>{}</a>"
-                ).format(
-                    _(
-                        "To accept payments via Stripe, you will need an account at Stripe. By clicking on the "
-                        "following button, you can either create a new Stripe account connect eventyay to an existing "
-                        "one."
-                    ),
-                    self.get_connect_url(request),
-                    _("Connect with Stripe"),
-                )
+        if not self.settings.connect_client_id:
+            # Global Stripe Connect credentials not configured by administrator
             return (
-                "<button formaction='{}' class='btn btn-danger'>{}</button>"
+                "<div class='alert alert-warning'>{}</div>"
             ).format(
-                reverse(
-                    "plugins:eventyay_stripe:oauth.disconnect",
-                    kwargs={
-                        "organizer": self.event.organizer.slug,
-                        "event": self.event.slug,
-                    },
+                _(
+                    "Stripe Connect is not yet configured. Please ask your administrator to set up "
+                    "the Stripe Connect credentials (Client ID and Secret Key) in the global settings "
+                    "before you can connect your Stripe account."
+                )
+            )
+
+        # Global credentials are present — use Stripe Connect OAuth
+        if not self.settings.connect_user_id:
+            return (
+                "<p>{}</p>"
+                "<a href='{}' class='btn btn-primary btn-lg'>"
+                "<span class='fa fa-lock'></span> {}"
+                "</a>"
+            ).format(
+                _(
+                    "To accept payments via Stripe, you will need an account at Stripe. By clicking on the "
+                    "following button, you can either create a new Stripe account or connect eventyay to an "
+                    "existing one."
                 ),
-                _("Disconnect from Stripe"),
+                self.get_connect_url(request),
+                _("Connect with Stripe"),
             )
-        else:
-            message = _(
-                'Please configure a %%(link)s to '
-                'the following endpoint in order to automatically cancel orders when charges are refunded '
-                'externally and to process asynchronous payment methods like SOFORT.'
-            ) % {'link': '<a href="https://dashboard.stripe.com/account/webhooks">Stripe Webhook</a>'}
-            return "<div class='alert alert-info'>{}<br /><code>{}</code></div>".format(
-                message,
-                build_global_uri("plugins:eventyay_stripe:webhook")
-            )
+
+        # Already connected — show account info and disconnect button
+        account_name = self.settings.connect_user_name or self.settings.connect_user_id
+        return (
+            "<div class='alert alert-success'>"
+            "<span class='fa fa-check-circle'></span> {connected_msg}"
+            "</div>"
+            "<button formaction='{disconnect_url}' class='btn btn-danger'>"
+            "<span class='fa fa-unlink'></span> {disconnect_label}"
+            "</button>"
+        ).format(
+            connected_msg=_(
+                "Connected as <strong>{account}</strong>. Your Stripe account is linked to eventyay."
+            ).format(account=account_name),
+            disconnect_url=reverse(
+                "plugins:eventyay_stripe:oauth.disconnect",
+                kwargs={
+                    "organizer": self.event.organizer.slug,
+                    "event": self.event.slug,
+                },
+            ),
+            disconnect_label=_("Disconnect from Stripe"),
+        )
 
     @property
     def settings_form_fields(self):
@@ -199,75 +213,40 @@ class StripeSettingsHolder(BasePaymentProvider):
         else:
             moto_settings = []
 
-        if self.settings.connect_client_id and not self.settings.secret_key:
-            # Stripe connect
-            if self.settings.connect_user_id:
-                fields = [
-                    (
-                        "connect_user_name",
-                        forms.CharField(label=_("Stripe account"), disabled=True),
-                    ),
-                    (
-                        "connect_user_id",
-                        forms.CharField(label=_("Stripe user id"), disabled=True),
-                    ),
-                    (
-                        "endpoint",
-                        forms.ChoiceField(
-                            label=_("Endpoint"),
-                            initial="live",
-                            choices=(
-                                ("live", pgettext("stripe", "Live")),
-                                ("test", pgettext("stripe", "Testing")),
-                            ),
-                            help_text=_(
-                                "If your event is in test mode, we will always use Stripe's test API, "
-                                "regardless of this setting."
-                            ),
-                        ),
-                    ),
-                ]
-            else:
-                return {}
-        else:
-            allcountries = list(countries)
-            allcountries.insert(0, ("", _("Select country")))
+        if not self.settings.connect_client_id:
+            # Global Stripe Connect not configured — no fields to show
+            return {}
 
+        if self.settings.connect_user_id:
+            # Connected via Stripe Connect OAuth — show read-only account info and mode selector
             fields = [
                 (
-                    "publishable_key",
-                    forms.CharField(
-                        label=_("Publishable key"),
-                        help_text=_(
-                            '<a target="_blank" rel="noopener" href="{docs_url}">{text}</a>'
-                        ).format(
-                            text=_(
-                                "Click here for a tutorial on how to obtain the required keys"
-                            ),
-                            docs_url="https://docs.stripe.com/keys",
-                        ),
-                        validators=(StripeKeyValidator("pk_"),),
-                    ),
+                    "connect_user_name",
+                    forms.CharField(label=_("Stripe account"), disabled=True),
                 ),
                 (
-                    "secret_key",
-                    SecretKeySettingsField(
-                        label=_("Secret key"),
-                        validators=(StripeKeyValidator(["sk_", "rk_"]),),
-                    ),
+                    "connect_user_id",
+                    forms.CharField(label=_("Stripe user id"), disabled=True),
                 ),
                 (
-                    "merchant_country",
+                    "endpoint",
                     forms.ChoiceField(
-                        choices=allcountries,
-                        label=_("Merchant country"),
+                        label=_("Endpoint"),
+                        initial="live",
+                        choices=(
+                            ("live", pgettext("stripe", "Live")),
+                            ("test", pgettext("stripe", "Testing")),
+                        ),
                         help_text=_(
-                            "The country in which your Stripe-account is registered in. Usually, this is your "
-                            "country of residence."
+                            "If your event is in test mode, we will always use Stripe's test API, "
+                            "regardless of this setting."
                         ),
                     ),
                 ),
             ]
+        else:
+            # Not yet connected — no fields until OAuth is completed
+            return {}
 
         d = OrderedDict(
             fields

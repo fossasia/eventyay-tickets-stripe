@@ -1,6 +1,7 @@
 import hashlib
 import json
 import logging
+import re
 import urllib.parse
 from collections import OrderedDict
 from decimal import Decimal
@@ -47,7 +48,6 @@ from pydantic import ValidationError
 from . import __version__
 from .models import ReferencedStripeObject, RegisteredApplePayDomain
 from .tasks import get_stripe_account_key, stripe_verify_domain
-from .utils import stripe_decimal_to_int, stripe_statement_descriptor
 from .validation_models import (
     LatestCharge,
     PaymentInfoData,
@@ -158,7 +158,7 @@ class StripeSettingsHolder(BasePaymentProvider):
             ).format(
                 _(
                     "To accept payments via Stripe, you will need an account at Stripe. By clicking on the "
-                    "following button, you can either create a new Stripe account or connect to an "
+                    "following button, you can either create a new Stripe account or connect eventyay to an "
                     "existing one."
                 ),
                 self.get_connect_url(request),
@@ -635,7 +635,7 @@ class StripeMethod(BasePaymentProvider):
 
     def _decimal_to_int(self, amount):
         places = settings.CURRENCY_PLACES.get(self.event.currency, 2)
-        return stripe_decimal_to_int(amount, places)
+        return int(amount * 10**places)
 
     def _get_amount(self, payment):
         return self._decimal_to_int(payment.amount)
@@ -660,7 +660,11 @@ class StripeMethod(BasePaymentProvider):
         return d
 
     def statement_descriptor(self, payment, length=22):
-        return stripe_statement_descriptor(self.event.slug, payment.order.code, self.event.name, length)
+        return "{event}-{code} {eventname}".format(
+            event=self.event.slug.upper(),
+            code=payment.order.code,
+            eventname=re.sub("[^a-zA-Z0-9 ]", "", str(self.event.name)),
+        )[:length]
 
     @property
     def api_config(self):

@@ -275,14 +275,6 @@ Lint and format Python with Ruff:
    ruff format --check .
    ruff format .
 
-Run standalone plugin tests:
-
-.. code-block:: bash
-
-   pytest tests/
-
-Django integration tests in ``eventyay_stripe/tests`` require a working Eventyay install and are skipped when Eventyay is not available.
-
 Compile translations:
 
 .. code-block:: bash
@@ -294,6 +286,12 @@ Regenerate translation files:
 .. code-block:: bash
 
    make localegen
+
+Run tests, if tests are available in the checkout:
+
+.. code-block:: bash
+
+   pytest
 
 Package structure
 -----------------
@@ -313,7 +311,6 @@ Important files and directories:
    │   ├── signals.py         Payment provider registration and settings hooks
    │   ├── tasks.py           Background tasks such as Apple Pay domain verification
    │   ├── urls.py            Event, control, webhook, OAuth, and SCA URLs
-   │   ├── utils.py           Shared Stripe helpers
    │   ├── views.py           Webhook, OAuth, redirect, return, and settings views
    │   ├── templates/         Django templates
    │   ├── static/            Static assets
@@ -324,7 +321,6 @@ Important files and directories:
    ├── MANIFEST.in            Package data inclusion
    ├── Makefile               Translation helper commands
    ├── pytest.ini             Pytest configuration
-   ├── tests/                 Standalone plugin tests
    ├── LICENSE                Apache License 2.0
    └── README.rst             Project documentation
 

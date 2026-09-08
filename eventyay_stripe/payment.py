@@ -220,11 +220,7 @@ class StripeSettingsHolder(BasePaymentProvider):
         else:
             moto_settings = []
         if getattr(self, "event", None):
-            has_secret = bool(
-                self.settings.connect_secret_key
-                if self.settings.get("endpoint", "live") == "live" and not self.event.testmode
-                else self.settings.connect_test_secret_key
-            )
+            has_secret = bool(self.settings.connect_secret_key or self.settings.connect_test_secret_key)
         else:
             # Fallback if no event available (which shouldn't happen for event settings)
             has_secret = bool(self.settings.connect_secret_key or self.settings.connect_test_secret_key)
@@ -235,6 +231,12 @@ class StripeSettingsHolder(BasePaymentProvider):
 
         if self.settings.connect_user_id:
             # Connected via Stripe Connect OAuth — show read-only account info and mode selector
+            choices = []
+            if self.settings.connect_secret_key:
+                choices.append(("live", pgettext("stripe", "Live")))
+            if self.settings.connect_test_secret_key:
+                choices.append(("test", pgettext("stripe", "Testing")))
+
             fields = [
                 (
                     "connect_user_name",
@@ -248,11 +250,8 @@ class StripeSettingsHolder(BasePaymentProvider):
                     "endpoint",
                     forms.ChoiceField(
                         label=_("Endpoint"),
-                        initial="live",
-                        choices=(
-                            ("live", pgettext("stripe", "Live")),
-                            ("test", pgettext("stripe", "Testing")),
-                        ),
+                        initial="live" if self.settings.connect_secret_key else "test",
+                        choices=tuple(choices),
                         help_text=_(
                             "If your event is in test mode, we will always use Stripe's test API, "
                             "regardless of this setting."

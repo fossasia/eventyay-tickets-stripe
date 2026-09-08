@@ -220,11 +220,7 @@ class StripeSettingsHolder(BasePaymentProvider):
         else:
             moto_settings = []
         if getattr(self, "event", None):
-            has_secret = bool(
-                self.settings.connect_secret_key
-                if self.settings.get("endpoint", "live") == "live" and not self.event.testmode
-                else self.settings.connect_test_secret_key
-            )
+            has_secret = bool(self.settings.connect_secret_key or self.settings.connect_test_secret_key)
         else:
             # Fallback if no event available (which shouldn't happen for event settings)
             has_secret = bool(self.settings.connect_secret_key or self.settings.connect_test_secret_key)
